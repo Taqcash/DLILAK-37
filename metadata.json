@@ -1,0 +1,7 @@
+{
+  "name": "دليل خدمتك",
+  "description": "المنصة الذكية الأولى لربط مقدمي وطالبي الخدمات في بورتسودان.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
