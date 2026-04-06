@@ -2018,13 +2018,22 @@ const AuthPage = () => {
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showOtp, setShowOtp] = useState(false);
+  const [otp, setOtp] = useState('');
 
   const handleAuth = async () => {
     setLoading(true);
     try {
       if (isLogin) {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) throw error;
+        if (error) {
+          if (error.message.includes('Email not confirmed')) {
+            setShowOtp(true);
+            alert('يرجى تأكيد بريدك الإلكتروني أولاً.');
+            return;
+          }
+          throw error;
+        }
       } else {
         const { error } = await supabase.auth.signUp({
           email,
@@ -2034,8 +2043,42 @@ const AuthPage = () => {
           }
         });
         if (error) throw error;
-        alert('تم إنشاء الحساب! يرجى تأكيد بريدك الإلكتروني إذا تطلب الأمر.');
+        setShowOtp(true);
+        alert('تم إرسال رمز التأكيد إلى بريدك الإلكتروني.');
       }
+    } catch (error: any) {
+      alert(error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResendOtp = async () => {
+    setLoading(true);
+    try {
+      const { error } = await supabase.auth.resend({
+        type: 'signup',
+        email
+      });
+      if (error) throw error;
+      alert('تم إعادة إرسال الرمز بنجاح!');
+    } catch (error: any) {
+      alert(error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyOtp = async () => {
+    setLoading(true);
+    try {
+      const { error } = await supabase.auth.verifyOtp({
+        email,
+        token: otp,
+        type: 'signup'
+      });
+      if (error) throw error;
+      alert('تم تأكيد الحساب بنجاح!');
     } catch (error: any) {
       alert(error.message);
     } finally {
@@ -2051,33 +2094,68 @@ const AuthPage = () => {
             <Logo size="lg" />
           </div>
           <h1 className="text-3xl font-black mb-2">دليل خدمتك</h1>
-          <p className="text-gray-500">{isLogin ? 'سجل دخولك للمتابعة' : 'أنشئ حساباً جديداً للبدء'}</p>
+          <p className="text-gray-500">
+            {showOtp ? 'أدخل رمز التأكيد المرسل لبريدك' : (isLogin ? 'سجل دخولك للمتابعة' : 'أنشئ حساباً جديداً للبدء')}
+          </p>
         </div>
 
         <div className="space-y-4">
-          {!isLogin && (
-            <input 
-              type="text" 
-              value={fullName}
-              onChange={e => setFullName(e.target.value)}
-              placeholder="الاسم الكامل" 
-              className="w-full px-6 py-4 rounded-2xl bg-gray-50 border-none focus:ring-2 focus:ring-blue-500 outline-none" 
-            />
-          )}
-          <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="البريد الإلكتروني" className="w-full px-6 py-4 rounded-2xl bg-gray-50 border-none focus:ring-2 focus:ring-blue-500 outline-none" />
-          <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="كلمة المرور" className="w-full px-6 py-4 rounded-2xl bg-gray-50 border-none focus:ring-2 focus:ring-blue-500 outline-none" />
-          
-          <button 
-            onClick={handleAuth} 
-            disabled={loading}
-            className="w-full bg-blue-600 text-white py-4 rounded-2xl font-bold text-lg shadow-xl hover:bg-blue-700 transition-all disabled:opacity-50"
-          >
-            {loading ? 'جاري المعالجة...' : (isLogin ? 'دخول' : 'تسجيل حساب')}
-          </button>
+          {showOtp ? (
+            <>
+              <input 
+                type="text" 
+                value={otp} 
+                onChange={e => setOtp(e.target.value)} 
+                placeholder="رمز التأكيد (6 أرقام)" 
+                className="w-full px-6 py-4 rounded-2xl bg-gray-50 border-none focus:ring-2 focus:ring-blue-500 outline-none text-center text-2xl tracking-widest font-bold" 
+              />
+              <button 
+                onClick={handleVerifyOtp} 
+                disabled={loading || otp.length < 6}
+                className="w-full bg-green-600 text-white py-4 rounded-2xl font-bold text-lg shadow-xl hover:bg-green-700 transition-all disabled:opacity-50"
+              >
+                {loading ? 'جاري التأكيد...' : 'تأكيد الحساب'}
+              </button>
+              <div className="flex flex-col gap-2">
+                <button 
+                  onClick={handleResendOtp} 
+                  disabled={loading}
+                  className="w-full text-blue-600 font-bold py-2 text-sm"
+                >
+                  إعادة إرسال الرمز
+                </button>
+                <button onClick={() => setShowOtp(false)} className="w-full text-gray-500 font-bold py-2 text-sm">
+                  العودة لتسجيل الدخول
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              {!isLogin && (
+                <input 
+                  type="text" 
+                  value={fullName}
+                  onChange={e => setFullName(e.target.value)}
+                  placeholder="الاسم الكامل" 
+                  className="w-full px-6 py-4 rounded-2xl bg-gray-50 border-none focus:ring-2 focus:ring-blue-500 outline-none" 
+                />
+              )}
+              <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="البريد الإلكتروني" className="w-full px-6 py-4 rounded-2xl bg-gray-50 border-none focus:ring-2 focus:ring-blue-500 outline-none" />
+              <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="كلمة المرور" className="w-full px-6 py-4 rounded-2xl bg-gray-50 border-none focus:ring-2 focus:ring-blue-500 outline-none" />
+              
+              <button 
+                onClick={handleAuth} 
+                disabled={loading}
+                className="w-full bg-blue-600 text-white py-4 rounded-2xl font-bold text-lg shadow-xl hover:bg-blue-700 transition-all disabled:opacity-50"
+              >
+                {loading ? 'جاري المعالجة...' : (isLogin ? 'دخول' : 'تسجيل حساب')}
+              </button>
 
-          <button onClick={() => setIsLogin(!isLogin)} className="w-full text-blue-600 font-bold py-2">
-            {isLogin ? 'ليس لديك حساب؟ سجل الآن' : 'لديك حساب بالفعل؟ سجل دخولك'}
-          </button>
+              <button onClick={() => setIsLogin(!isLogin)} className="w-full text-blue-600 font-bold py-2">
+                {isLogin ? 'ليس لديك حساب؟ سجل الآن' : 'لديك حساب بالفعل؟ سجل دخولك'}
+              </button>
+            </>
+          )}
         </div>
       </motion.div>
     </div>
