@@ -1,8 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Link, useNavigate, Navigate, useLocation } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Link, useNavigate, Navigate, useLocation, useParams } from 'react-router-dom';
+import { GoogleGenAI } from "@google/genai";
+import Markdown from 'react-markdown';
 import { NEIGHBORHOODS, PROFESSIONS } from './constants/data';
 import { supabase } from './lib/supabase';
-import { getGeminiAI, improveAd, verifyID, moderateContent } from './lib/gemini';
+import { getGeminiAI, improveAd, verifyID, moderateContent, smartSearch, generateSiteReport } from './lib/gemini';
+import { uploadToCloudinary } from './lib/cloudinary';
+import { sendWhatsAppNotification } from './lib/notifications';
 import { 
   Search, 
   MapPin, 
@@ -16,6 +20,8 @@ import {
   X,
   Star,
   ArrowLeft,
+  ArrowRight,
+  Share2,
   Settings,
   LogOut,
   Bell,
@@ -27,9 +33,17 @@ import {
   AlertCircle,
   Facebook,
   Send,
-  BarChart
+  BarChart,
+  History,
+  Terminal,
+  Stethoscope,
+  Activity,
+  ExternalLink,
+  ChevronLeft
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+
+import { generatePortSudanImages } from './services/imageService';
 
 // --- Types ---
 interface UserProfile {
@@ -39,23 +53,118 @@ interface UserProfile {
   is_verified: boolean;
   gemini_api_key?: string;
   role: 'user' | 'admin';
+  points?: number;
+  ai_usage_count?: number;
 }
 
+interface AIHistoryItem {
+  id: string;
+  user_id: string;
+  feature: string;
+  prompt: string;
+  response: string;
+  created_at: string;
+}
+
+const AIHistorySection = ({ userApiKey }: any) => {
+  const [history, setHistory] = useState<AIHistoryItem[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchHistory = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      
+      const { data } = await supabase
+        .from('ai_logs')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(10);
+      
+      if (data) setHistory(data);
+      setLoading(false);
+    };
+    fetchHistory();
+  }, []);
+
+  if (!userApiKey) return null;
+
+  return (
+    <div className="p-6 bg-white rounded-3xl border border-gray-100 shadow-sm mt-8">
+      <h3 className="font-bold mb-6 flex items-center gap-2 text-blue-600"><History size={20} /> سجل العمليات الذكي</h3>
+      {loading ? (
+        <div className="flex justify-center py-8"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div></div>
+      ) : history.length > 0 ? (
+        <div className="space-y-4">
+          {history.map((item) => (
+            <div key={item.id} className="p-4 bg-gray-50 rounded-2xl border border-gray-100">
+              <div className="flex justify-between items-start mb-2">
+                <span className="text-[10px] bg-blue-100 text-blue-700 px-2 py-1 rounded-full font-bold">{item.feature}</span>
+                <span className="text-[10px] text-gray-400">{new Date(item.created_at).toLocaleDateString('ar-EG')}</span>
+              </div>
+              <p className="text-xs font-bold text-gray-800 line-clamp-1 mb-1">{item.prompt}</p>
+              <p className="text-[10px] text-gray-500 line-clamp-2">{item.response}</p>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="text-center py-8 text-gray-400 text-sm">لا يوجد سجل عمليات بعد.</div>
+      )}
+    </div>
+  );
+};
+
+const AIGuard = ({ userApiKey, children }: any) => {
+  if (!userApiKey) {
+    return (
+      <div className="p-8 bg-amber-50 border-2 border-dashed border-amber-200 rounded-[40px] text-center">
+        <div className="w-16 h-16 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center mx-auto mb-4">
+          <Sparkles size={32} />
+        </div>
+        <h3 className="text-xl font-bold text-amber-900 mb-2">هذه الميزة تتطلب مفتاح Gemini API</h3>
+        <p className="text-amber-700 text-sm mb-6">لتتمكن من استخدام ميزات الذكاء الاصطناعي، يرجى إضافة مفتاح API الخاص بك أولاً.</p>
+        <Link 
+          to="/gemini-setup" 
+          className="inline-flex items-center gap-2 bg-amber-600 text-white px-8 py-3 rounded-2xl font-bold hover:bg-amber-700 transition-all shadow-lg"
+        >
+          اضغط هنا للانتقال لصفحة الإعدادات <ArrowLeft size={18} />
+        </Link>
+      </div>
+    );
+  }
+  return children;
+};
 const Logo = ({ size = "md" }: { size?: "sm" | "md" | "lg" }) => {
   const dimensions = {
-    sm: "w-12 h-12 text-[10px]",
-    md: "w-20 h-20 text-xs",
-    lg: "w-24 h-24 text-sm"
+    sm: "w-12 h-12",
+    md: "w-20 h-20",
+    lg: "w-24 h-24"
   };
   
   return (
-    <div className={`${dimensions[size]} bg-gradient-to-br from-blue-600 to-cyan-500 rounded-2xl flex items-center justify-center text-white shadow-lg border-2 border-white/20 relative overflow-hidden group`}>
-      <div className="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity" />
-      <div className="relative z-10 flex flex-col items-center justify-center">
-        <Sparkles size={size === "sm" ? 16 : 24} className="mb-1" />
-        <span className="font-black leading-none select-none tracking-tighter">PORT-SD</span>
-      </div>
-      <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-white/20 rounded-full blur-xl" />
+    <div className={`${dimensions[size]} relative group`}>
+      <svg viewBox="0 0 100 100" className="w-full h-full drop-shadow-lg" xmlns="http://www.w3.org/2000/svg">
+        {/* Sun/Circle */}
+        <circle cx="50" cy="50" r="48" fill="#f8fafc" stroke="#e2e8f0" strokeWidth="1" />
+        
+        {/* Mountains (Red Sea Hills) */}
+        <path d="M10 70 L30 40 L50 60 L70 30 L90 70 Z" fill="#92400e" className="opacity-80" />
+        
+        {/* Red Sea Waves */}
+        <path d="M10 75 Q30 65 50 75 T90 75 L90 90 L10 90 Z" fill="#2563eb" />
+        
+        {/* Stylized Khalal (3-pronged comb) */}
+        <g transform="translate(40, 45) scale(0.2)">
+          <rect x="0" y="0" width="10" height="100" rx="5" fill="#4b5563" />
+          <rect x="40" y="0" width="10" height="100" rx="5" fill="#4b5563" />
+          <rect x="80" y="0" width="10" height="100" rx="5" fill="#4b5563" />
+          <rect x="0" y="0" width="90" height="20" rx="10" fill="#4b5563" />
+        </g>
+        
+        {/* Port/Anchor Hint */}
+        <circle cx="50" cy="85" r="3" fill="white" />
+      </svg>
     </div>
   );
 };
@@ -158,7 +267,7 @@ const Layout = ({ children, user, onLogout, onOpenProfile, onOpenNotifications }
 
 // --- Pages ---
 
-const LandingPage = () => {
+const LandingPage = ({ userApiKey, mainImage, neighborhoods, professions }: any) => {
   const [viewType, setViewType] = useState<'providers' | 'seekers'>('providers');
   const [services, setServices] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -168,6 +277,8 @@ const LandingPage = () => {
   const [selectedServiceForRate, setSelectedServiceForRate] = useState<any>(null);
   const [showMap, setShowMap] = useState(false);
   const [activeCategory, setActiveCategory] = useState<'all' | 'productive' | 'training'>('all');
+  const [isSmartSearching, setIsSmartSearching] = useState(false);
+  const navigate = useNavigate();
 
   useEffect(() => {
     fetchServices();
@@ -180,7 +291,7 @@ const LandingPage = () => {
       .select('*')
       .eq('type', viewType === 'providers' ? 'offer' : 'request')
       .eq('status', 'approved')
-      .gte('avg_rating', 2); // Blacklist: Hide ads with rating < 2
+      .gte('avg_rating', 2);
     
     if (activeCategory === 'productive') {
       query = query.eq('is_productive_family', true);
@@ -188,12 +299,56 @@ const LandingPage = () => {
       query = query.eq('is_training', true);
     }
 
-    const { data, error } = await query
+    const { data } = await query
       .order('is_premium', { ascending: false })
       .order('created_at', { ascending: false });
     
     if (data) setServices(data);
     setLoading(false);
+  };
+
+  const handleSearch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!searchQuery.trim()) return;
+
+    if (searchQuery.startsWith('/')) {
+      const command = searchQuery.slice(1).toLowerCase();
+      if (command === 'سباك' || command === 'plumber') {
+        setSelectedProfession('سباك');
+        setSearchQuery('');
+        return;
+      }
+      if (command === 'دعم' || command === 'support') {
+        alert('سيتم فتح نافذة الدعم الفني قريباً.');
+        setSearchQuery('');
+        return;
+      }
+      if (command === 'منتدى' || command === 'forum') {
+        navigate('/forum');
+        setSearchQuery('');
+        return;
+      }
+    }
+
+    if (userApiKey && searchQuery.length > 3) {
+      setIsSmartSearching(true);
+      try {
+        const dataContext = services.slice(0, 20).map(s => `ID: ${s.id}, Title: ${s.title}, Description: ${s.description}`).join('\n');
+        const resultStr = await smartSearch(searchQuery, dataContext, userApiKey);
+        if (resultStr) {
+          const result = JSON.parse(resultStr.replace(/```json|```/g, ''));
+          if (result.ids && result.ids.length > 0) {
+            const filtered = services.filter(s => result.ids.includes(s.id));
+            setServices(filtered);
+            alert(`تم العثور على ${filtered.length} نتائج مطابقة ذكياً!`);
+          }
+        }
+      } catch (error) {
+        console.error("Smart search failed", error);
+      } finally {
+        setIsSmartSearching(false);
+      }
+    }
   };
 
   const filteredServices = services.filter(s => {
@@ -204,98 +359,116 @@ const LandingPage = () => {
     return matchesSearch && matchesProfession && matchesNeighborhood;
   });
 
+  const handleSmartSearch = async () => {
+    if (!userApiKey) {
+      alert('يرجى إضافة مفتاح Gemini API في ملفك الشخصي لاستخدام البحث الذكي');
+      return;
+    }
+    if (!searchQuery) return;
+
+    setIsSmartSearching(true);
+    try {
+      const dataContext = services.map(s => `ID: ${s.id}, Title: ${s.title}, Description: ${s.description}`).join('\n');
+      const result = await smartSearch(searchQuery, dataContext, userApiKey);
+      if (result) {
+        // The result is expected to be a JSON string with IDs
+        try {
+          const json = JSON.parse(result.replace(/```json|```/g, ''));
+          if (json.ids) {
+            const smartFiltered = services.filter(s => json.ids.includes(s.id));
+            setServices(smartFiltered);
+            alert('تم تطبيق البحث الذكي بنجاح!');
+          }
+        } catch (e) {
+          console.error("Failed to parse smart search result", e);
+          alert('فشل تحليل نتائج البحث الذكي، جرب صياغة أخرى');
+        }
+      }
+    } catch (error) {
+      alert('حدث خطأ أثناء البحث الذكي');
+    } finally {
+      setIsSmartSearching(false);
+    }
+  };
+
   return (
-    <div className="pb-20">
-      <header className="py-12 px-4 text-center bg-white border-b border-gray-100">
-        <div className="max-w-4xl mx-auto">
-          <h2 className="text-4xl md:text-5xl font-black mb-6 leading-tight">
-            <span className="gradient-text">دليل خدمتك</span> في بورتسودان.
-          </h2>
-          
-          {/* Emergency Hub */}
-          <div className="mb-10 overflow-x-auto pb-4 no-scrollbar">
-            <div className="flex gap-4 min-w-max px-4">
-              <div className="bg-red-50 border border-red-100 p-4 rounded-2xl flex items-center gap-3 shadow-sm">
-                <div className="bg-red-600 text-white p-2 rounded-xl animate-pulse"><AlertCircle size={20} /></div>
-                <div className="text-right">
-                  <p className="text-xs text-red-600 font-bold">قسم الطوارئ</p>
-                  <p className="text-sm font-black">خدمات عاجلة 24/7</p>
-                </div>
+    <div className="min-h-screen pb-24">
+      {/* Hero Section */}
+      <div className="relative pt-24 pb-32 px-4 overflow-hidden">
+        <img 
+          src={mainImage || "https://picsum.photos/seed/portsudan/1920/1080"} 
+          className="absolute inset-0 w-full h-full object-cover -z-10 opacity-40" 
+          referrerPolicy="no-referrer" 
+        />
+        <div className="absolute inset-0 bg-gradient-to-br from-blue-600/80 via-blue-700/80 to-indigo-900/80 -z-10" />
+        <div className="absolute top-0 right-0 w-96 h-96 bg-white/10 rounded-full blur-3xl -mr-48 -mt-48" />
+        <div className="absolute bottom-0 left-0 w-96 h-96 bg-blue-400/20 rounded-full blur-3xl -ml-48 -mb-48" />
+        
+        <div className="max-w-4xl mx-auto text-center relative z-10">
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+            <h1 className="text-5xl md:text-7xl font-black text-white mb-6 leading-tight tracking-tighter">
+              كل خدمات <span className="text-blue-300">بورتسودان</span> <br /> في مكان واحد
+            </h1>
+            <p className="text-blue-100 text-lg md:text-xl mb-12 max-w-2xl mx-auto font-medium opacity-90">
+              دليل الخدمات الأول في المدينة. ابحث عن سباك، كهربائي، أو أي خدمة تحتاجها بكل سهولة وموثوقية.
+            </p>
+          </motion.div>
+
+          <div className="relative max-w-2xl mx-auto">
+            <form onSubmit={handleSearch} className="relative group">
+              <input 
+                type="text" 
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="ابحث عن خدمة (مثلاً: سباك في حي الشاطئ) أو استخدم / للأوامر"
+                className="w-full bg-white/10 backdrop-blur-xl border border-white/20 text-white placeholder:text-blue-200 px-8 py-6 rounded-[32px] text-lg outline-none focus:ring-4 focus:ring-blue-400/30 transition-all shadow-2xl pr-16"
+              />
+              <button type="submit" className="absolute left-4 top-1/2 -translate-y-1/2 bg-white text-blue-600 p-4 rounded-2xl shadow-lg hover:scale-105 transition-transform">
+                {isSmartSearching ? <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div> : <Search size={24} />}
+              </button>
+              <div className="absolute right-6 top-1/2 -translate-y-1/2 text-blue-200">
+                <Terminal size={24} />
               </div>
-              {['سباك طوارئ', 'كهربائي أعطال', 'إسعاف خاص', 'فتح أقفال'].map(service => (
-                <button key={service} className="bg-white border border-gray-100 px-6 py-3 rounded-2xl font-bold hover:border-red-200 hover:bg-red-50 transition-all shadow-sm">
-                  {service}
+            </form>
+            
+            <div className="flex flex-wrap justify-center gap-3 mt-6">
+              <span className="text-blue-200 text-sm font-bold ml-2">أوامر سريعة:</span>
+              {['/سباك', '/منتدى', '/دعم'].map((cmd) => (
+                <button 
+                  key={cmd}
+                  onClick={() => setSearchQuery(cmd)}
+                  className="bg-white/5 hover:bg-white/10 border border-white/10 text-white px-4 py-1.5 rounded-full text-xs transition-colors"
+                >
+                  {cmd}
                 </button>
               ))}
             </div>
           </div>
-
-          <div className="flex justify-center gap-4 mb-10">
-            <button 
-              onClick={() => setViewType('providers')}
-              className={`px-6 py-3 rounded-2xl font-bold transition-all ${viewType === 'providers' ? 'bg-blue-600 text-white shadow-lg' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
-            >
-              مقدمي الخدمات
-            </button>
-            <button 
-              onClick={() => setViewType('seekers')}
-              className={`px-6 py-3 rounded-2xl font-bold transition-all ${viewType === 'seekers' ? 'bg-blue-600 text-white shadow-lg' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
-            >
-              طالبي الخدمات
-            </button>
-          </div>
-
-          <div className="flex flex-wrap justify-center gap-3 mb-8">
-            <button 
-              onClick={() => setActiveCategory('all')}
-              className={`px-4 py-2 rounded-full text-sm font-bold transition-all ${activeCategory === 'all' ? 'bg-blue-100 text-blue-700' : 'bg-gray-50 text-gray-500'}`}
-            >
-              الكل
-            </button>
-            <button 
-              onClick={() => setActiveCategory('productive')}
-              className={`px-4 py-2 rounded-full text-sm font-bold transition-all ${activeCategory === 'productive' ? 'bg-pink-100 text-pink-700' : 'bg-gray-50 text-gray-500'}`}
-            >
-              الأسر المنتجة 🏠
-            </button>
-            <button 
-              onClick={() => setActiveCategory('training')}
-              className={`px-4 py-2 rounded-full text-sm font-bold transition-all ${activeCategory === 'training' ? 'bg-green-100 text-green-700' : 'bg-gray-50 text-gray-500'}`}
-            >
-              تدريب وورش 🎓
-            </button>
-            <button 
-              onClick={() => setShowMap(!showMap)}
-              className="px-4 py-2 rounded-full text-sm font-bold bg-indigo-100 text-indigo-700 flex items-center gap-2"
-            >
-              <MapPin size={14} /> {showMap ? 'إخفاء الخريطة' : 'الخريطة التفاعلية'}
-            </button>
-          </div>
-
-          <div className="glass p-2 rounded-3xl shadow-xl flex flex-col md:flex-row gap-2 max-w-3xl mx-auto">
-            <div className="flex-1 relative">
-              <Search className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
-              <input 
-                type="text"
-                placeholder="ابحث عن خدمة أو طلب..."
-                className="w-full pr-12 pl-4 py-4 rounded-2xl bg-transparent outline-none"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-            </div>
-          </div>
         </div>
-      </header>
+      </div>
 
       <section className="sticky top-[72px] z-40 bg-gray-50/80 backdrop-blur-md py-4 px-4 border-b border-gray-200 overflow-x-auto">
         <div className="max-w-6xl mx-auto flex gap-3 no-scrollbar">
+          <button 
+            onClick={() => setViewType('providers')}
+            className={`px-6 py-2 rounded-full font-bold transition-all text-sm ${viewType === 'providers' ? 'bg-blue-600 text-white shadow-lg' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'}`}
+          >
+            مقدمي الخدمات
+          </button>
+          <button 
+            onClick={() => setViewType('seekers')}
+            className={`px-6 py-2 rounded-full font-bold transition-all text-sm ${viewType === 'seekers' ? 'bg-blue-600 text-white shadow-lg' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'}`}
+          >
+            طالبي الخدمات
+          </button>
+          <div className="w-px h-8 bg-gray-200 mx-2" />
           <select 
             className="px-4 py-2 rounded-full bg-white border border-gray-200 text-sm outline-none"
             value={selectedProfession}
             onChange={(e) => setSelectedProfession(e.target.value)}
           >
             <option value="الكل">كل المهن</option>
-            {PROFESSIONS.map(p => <option key={p} value={p}>{p}</option>)}
+            {professions.map((p: string) => <option key={p} value={p}>{p}</option>)}
           </select>
           <select 
             className="px-4 py-2 rounded-full bg-white border border-gray-200 text-sm outline-none"
@@ -303,12 +476,39 @@ const LandingPage = () => {
             onChange={(e) => setSelectedNeighborhood(e.target.value)}
           >
             <option value="الكل">كل الأحياء</option>
-            {NEIGHBORHOODS.map(n => <option key={n} value={n}>{n}</option>)}
+            {neighborhoods.map((n: string) => <option key={n} value={n}>{n}</option>)}
           </select>
         </div>
       </section>
 
       <main className="max-w-6xl mx-auto px-4 py-8">
+        <div className="flex flex-wrap justify-center gap-3 mb-8">
+          <button 
+            onClick={() => setActiveCategory('all')}
+            className={`px-4 py-2 rounded-full text-sm font-bold transition-all ${activeCategory === 'all' ? 'bg-blue-100 text-blue-700' : 'bg-white border border-gray-100 text-gray-500'}`}
+          >
+            الكل
+          </button>
+          <button 
+            onClick={() => setActiveCategory('productive')}
+            className={`px-4 py-2 rounded-full text-sm font-bold transition-all ${activeCategory === 'productive' ? 'bg-pink-100 text-pink-700' : 'bg-white border border-gray-100 text-gray-500'}`}
+          >
+            الأسر المنتجة 🏠
+          </button>
+          <button 
+            onClick={() => setActiveCategory('training')}
+            className={`px-4 py-2 rounded-full text-sm font-bold transition-all ${activeCategory === 'training' ? 'bg-green-100 text-green-700' : 'bg-white border border-gray-100 text-gray-500'}`}
+          >
+            تدريب وورش 🎓
+          </button>
+          <button 
+            onClick={() => setShowMap(!showMap)}
+            className={`px-4 py-2 rounded-full text-sm font-bold flex items-center gap-2 transition-all ${showMap ? 'bg-indigo-600 text-white' : 'bg-indigo-100 text-indigo-700'}`}
+          >
+            <MapPin size={14} /> {showMap ? 'إخفاء الخريطة' : 'الخريطة التفاعلية'}
+          </button>
+        </div>
+
         {showMap && (
           <div className="mb-8 bg-white rounded-3xl p-4 shadow-sm border border-gray-100 h-96 relative overflow-hidden">
             <div className="absolute inset-0 bg-blue-50 flex items-center justify-center text-blue-300">
@@ -364,72 +564,311 @@ const LandingPage = () => {
   );
 };
 
-const ServiceCard = ({ service, onRate }: any) => (
-  <motion.div 
-    layout
-    initial={{ opacity: 0, scale: 0.95 }}
-    animate={{ opacity: 1, scale: 1 }}
-    className={`bg-white rounded-3xl p-5 shadow-sm border ${service.is_premium ? 'border-yellow-200 bg-yellow-50/30' : 'border-gray-100'} hover:shadow-xl transition-all group relative overflow-hidden`}
-  >
-    {service.is_premium && (
-      <div className="absolute top-0 left-0 bg-yellow-400 text-yellow-900 text-[10px] font-black px-3 py-1 rounded-br-xl uppercase tracking-widest">
-        مميز
-      </div>
-    )}
-    <div className="flex gap-4 mb-4">
-      <div className="w-16 h-16 bg-blue-100 rounded-2xl flex items-center justify-center text-blue-600 shrink-0 overflow-hidden">
-        {service.image_url ? (
-          <img src={service.image_url} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-        ) : (
-          <Briefcase size={28} />
-        )}
-      </div>
-      <div className="flex-1">
-        <div className="flex justify-between items-start">
-          <h3 className="font-bold text-lg group-hover:text-blue-600 transition-colors line-clamp-1">{service.title}</h3>
-          <div className="flex items-center gap-1 text-yellow-500 font-bold text-xs bg-yellow-50 px-2 py-0.5 rounded-lg">
-            <Star size={12} fill="currentColor" />
-            {service.avg_rating?.toFixed(1) || 'جديد'}
-          </div>
+const ServiceCard = ({ service, onRate }: any) => {
+  const navigate = useNavigate();
+  return (
+    <motion.div 
+      layout
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      onClick={() => navigate(`/service/${service.id}`)}
+      className={`bg-white rounded-3xl p-5 shadow-sm border ${service.is_premium ? 'border-yellow-200 bg-yellow-50/30' : 'border-gray-100'} hover:shadow-xl transition-all group relative overflow-hidden cursor-pointer`}
+    >
+      {service.is_premium && (
+        <div className="absolute top-0 left-0 bg-yellow-400 text-yellow-900 text-[10px] font-black px-3 py-1 rounded-br-xl uppercase tracking-widest">
+          مميز
         </div>
-        <div className="flex items-center gap-2 text-xs text-gray-500 mt-1">
-          <MapPin size={12} /> {service.neighborhood}
-          {service.is_field_verified && (
-            <span className="flex items-center gap-1 text-green-600 font-bold bg-green-50 px-2 py-0.5 rounded-full text-[9px]">
-              <CheckCircle2 size={10} /> موثق ميدانياً
-            </span>
+      )}
+      <div className="flex gap-4 mb-4">
+        <div className="w-16 h-16 bg-blue-100 rounded-2xl flex items-center justify-center text-blue-600 shrink-0 overflow-hidden">
+          {service.image_url ? (
+            <img src={service.image_url} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+          ) : (
+            <Briefcase size={28} />
           )}
         </div>
-      </div>
-    </div>
-    <p className="text-gray-600 text-sm line-clamp-3 mb-4 h-15">{service.description}</p>
-    <div className="flex items-center justify-between pt-4 border-t border-gray-100">
-      <div className="flex items-center gap-2">
-        <div className="w-8 h-8 bg-gray-200 rounded-full overflow-hidden">
-          <User size={16} className="m-2 text-gray-400" />
+        <div className="flex-1">
+          <div className="flex justify-between items-start">
+            <h3 className="font-bold text-lg group-hover:text-blue-600 transition-colors line-clamp-1">{service.title}</h3>
+            <div className="flex items-center gap-1 text-yellow-500 font-bold text-xs bg-yellow-50 px-2 py-0.5 rounded-lg">
+              <Star size={12} fill="currentColor" />
+              {service.avg_rating?.toFixed(1) || 'جديد'}
+            </div>
+          </div>
+          <div className="flex items-center gap-2 text-xs text-gray-500 mt-1">
+            <MapPin size={12} /> {service.neighborhood}
+            {service.is_field_verified && (
+              <span className="flex items-center gap-1 text-green-600 font-bold bg-green-50 px-2 py-0.5 rounded-full text-[9px]">
+                <CheckCircle2 size={10} /> موثق ميدانياً
+              </span>
+            )}
+          </div>
         </div>
-        <div className="flex flex-col">
-          <button onClick={() => onRate(service)} className="text-[10px] font-bold text-blue-600 hover:underline text-right">تقييم الخدمة</button>
-          <button onClick={() => alert('قريباً: حجز موعد ذكي')} className="text-[9px] font-bold text-purple-600 hover:underline text-right flex items-center gap-1">
-            <Sparkles size={10} /> حجز موعد
+      </div>
+      <p className="text-gray-600 text-sm line-clamp-3 mb-4 h-15">{service.description}</p>
+      <div className="flex items-center justify-between pt-4 border-t border-gray-100">
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 bg-gray-200 rounded-full overflow-hidden">
+            <User size={16} className="m-2 text-gray-400" />
+          </div>
+          <div className="flex flex-col">
+            <button 
+              onClick={(e) => { e.stopPropagation(); onRate(service); }} 
+              className="text-[10px] font-bold text-blue-600 hover:underline text-right"
+            >
+              تقييم الخدمة
+            </button>
+            <button 
+              onClick={(e) => { e.stopPropagation(); alert('قريباً: حجز موعد ذكي'); }} 
+              className="text-[9px] font-bold text-purple-600 hover:underline text-right flex items-center gap-1"
+            >
+              <Sparkles size={10} /> حجز موعد
+            </button>
+          </div>
+        </div>
+        <div className="flex gap-2">
+          <a 
+            href={`tel:${service.phone}`} 
+            onClick={(e) => e.stopPropagation()}
+            className="p-2 bg-green-100 text-green-700 rounded-xl hover:bg-green-200 transition-colors"
+          >
+            <Phone size={18} />
+          </a>
+          <a 
+            href={`https://wa.me/${service.phone}`} 
+            onClick={(e) => e.stopPropagation()}
+            className="p-2 bg-blue-100 text-blue-700 rounded-xl hover:bg-blue-200 transition-colors"
+          >
+            <MessageCircle size={18} />
+          </a>
+        </div>
+      </div>
+    </motion.div>
+  );
+};
+
+const ServiceDetailPage = ({ userApiKey }: any) => {
+  const { id } = useParams();
+  const [service, setService] = useState<any>(null);
+  const [ratings, setRatings] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showRateModal, setShowRateModal] = useState(false);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    fetchServiceDetails();
+  }, [id]);
+
+  const fetchServiceDetails = async () => {
+    setLoading(true);
+    const { data: serviceData } = await supabase
+      .from('ads')
+      .select('*, profiles(fullName, avatar_url, is_verified)')
+      .eq('id', id)
+      .single();
+    
+    if (serviceData) {
+      setService(serviceData);
+      const { data: ratingsData } = await supabase
+        .from('ratings')
+        .select('*, profiles(fullName, avatar_url)')
+        .eq('ad_id', id)
+        .order('created_at', { ascending: false });
+      
+      if (ratingsData) setRatings(ratingsData);
+    }
+    setLoading(false);
+  };
+
+  if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div></div>;
+  if (!service) return <div className="text-center py-20">عذراً، الخدمة غير موجودة.</div>;
+
+  return (
+    <div className="max-w-4xl mx-auto px-4 py-12">
+      <div className="flex justify-between items-center mb-8">
+        <button onClick={() => navigate(-1)} className="flex items-center gap-2 text-gray-500 hover:text-blue-600 transition-colors font-bold">
+          <ArrowRight size={20} /> العودة للخلف
+        </button>
+        <div className="flex gap-2">
+          <button 
+            onClick={() => {
+              navigator.share({
+                title: service.title,
+                text: service.description,
+                url: window.location.href
+              }).catch(() => alert('فشل المشاركة'));
+            }}
+            className="p-3 bg-white border border-gray-100 rounded-2xl text-gray-600 hover:bg-gray-50 transition-all shadow-sm"
+          >
+            <Share2 size={20} />
+          </button>
+          <button 
+            onClick={() => alert('تم إرسال بلاغ للإدارة، سنقوم بمراجعة هذا الإعلان فوراً.')}
+            className="p-3 bg-white border border-gray-100 rounded-2xl text-red-500 hover:bg-red-50 transition-all shadow-sm"
+          >
+            <AlertCircle size={20} />
           </button>
         </div>
       </div>
-      <div className="flex gap-2">
-        <a href={`tel:${service.phone}`} className="p-2 bg-green-100 text-green-700 rounded-xl hover:bg-green-200 transition-colors"><Phone size={18} /></a>
-        <a href={`https://wa.me/${service.phone}`} className="p-2 bg-blue-100 text-blue-700 rounded-xl hover:bg-blue-200 transition-colors"><MessageCircle size={18} /></a>
-      </div>
-    </div>
-  </motion.div>
-);
 
-const AboutPage = () => (
+      <div className="bg-white rounded-[40px] shadow-sm border border-gray-100 overflow-hidden mb-8">
+        <div className="relative h-80">
+          <img 
+            src={service.image_url || 'https://picsum.photos/seed/service/1200/600'} 
+            className="w-full h-full object-cover" 
+            referrerPolicy="no-referrer"
+          />
+          {service.is_premium && (
+            <div className="absolute top-6 left-6 bg-yellow-400 text-yellow-900 font-black px-6 py-2 rounded-2xl shadow-xl uppercase tracking-widest">
+              إعلان مميز
+            </div>
+          )}
+        </div>
+
+        <div className="p-8">
+          <div className="flex justify-between items-start mb-6">
+            <div>
+              <h1 className="text-4xl font-black mb-2">{service.title}</h1>
+              <div className="flex items-center gap-4 text-gray-500 font-bold">
+                <span className="flex items-center gap-1 bg-blue-50 text-blue-600 px-3 py-1 rounded-xl text-sm">
+                  <Briefcase size={16} /> {service.profession}
+                </span>
+                <span className="flex items-center gap-1 bg-gray-50 px-3 py-1 rounded-xl text-sm">
+                  <MapPin size={16} /> {service.neighborhood}
+                </span>
+              </div>
+            </div>
+            <div className="text-center">
+              <div className="text-4xl font-black text-yellow-500 mb-1">
+                {service.avg_rating?.toFixed(1) || '0.0'}
+              </div>
+              <div className="flex justify-center text-yellow-400 mb-1">
+                {[1,2,3,4,5].map(star => (
+                  <Star key={star} size={16} fill={Math.round(service.avg_rating || 0) >= star ? "currentColor" : "none"} />
+                ))}
+              </div>
+              <p className="text-[10px] text-gray-400 font-bold">{ratings.length} تقييم</p>
+            </div>
+          </div>
+
+          <div className="prose prose-blue max-w-none mb-12">
+            <h3 className="text-xl font-bold mb-4">وصف الخدمة</h3>
+            <p className="text-gray-600 leading-relaxed whitespace-pre-wrap">{service.description}</p>
+          </div>
+
+          <div className="grid sm:grid-cols-2 gap-6 mb-12">
+            <div className="bg-gray-50 p-6 rounded-3xl border border-gray-100">
+              <h4 className="font-bold mb-4 flex items-center gap-2"><User size={20} className="text-blue-600" /> معلومات مقدم الخدمة</h4>
+              <div className="flex items-center gap-4">
+                <div className="w-16 h-16 bg-white rounded-2xl shadow-sm flex items-center justify-center overflow-hidden">
+                  {service.profiles?.avatar_url ? (
+                    <img src={service.profiles.avatar_url} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                  ) : (
+                    <User size={32} className="text-gray-300" />
+                  )}
+                </div>
+                <div>
+                  <p className="font-black text-lg">{service.profiles?.fullName || 'مستخدم'}</p>
+                  <div className="flex gap-2 mt-1">
+                    {service.profiles?.is_verified && (
+                      <span className="text-[10px] font-bold bg-green-100 text-green-700 px-2 py-0.5 rounded-full flex items-center gap-1">
+                        <ShieldCheck size={10} /> هوية موثقة
+                      </span>
+                    )}
+                    {service.is_field_verified && (
+                      <span className="text-[10px] font-bold bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full flex items-center gap-1">
+                        <CheckCircle2 size={10} /> موثق ميدانياً
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-blue-600 p-6 rounded-3xl text-white shadow-xl flex flex-col justify-center">
+              <h4 className="font-bold mb-4 text-center">تواصل الآن</h4>
+              <div className="flex gap-4">
+                <a href={`tel:${service.phone}`} className="flex-1 bg-white/20 hover:bg-white/30 backdrop-blur-md py-4 rounded-2xl flex flex-col items-center gap-2 transition-all">
+                  <Phone size={24} />
+                  <span className="text-xs font-bold">اتصال هاتفي</span>
+                </a>
+                <a href={`https://wa.me/${service.phone}`} className="flex-1 bg-white/20 hover:bg-white/30 backdrop-blur-md py-4 rounded-2xl flex flex-col items-center gap-2 transition-all">
+                  <MessageCircle size={24} />
+                  <span className="text-xs font-bold">واتساب</span>
+                </a>
+              </div>
+            </div>
+          </div>
+
+          <div className="border-t border-gray-100 pt-12">
+            <div className="flex justify-between items-center mb-8">
+              <h3 className="text-2xl font-black">آراء العملاء ({ratings.length})</h3>
+              <button 
+                onClick={() => setShowRateModal(true)}
+                className="bg-blue-50 text-blue-600 px-6 py-2 rounded-xl font-bold hover:bg-blue-100 transition-all"
+              >
+                إضافة تقييمك
+              </button>
+            </div>
+
+            <div className="space-y-6">
+              {ratings.length > 0 ? ratings.map(rate => (
+                <div key={rate.id} className="bg-gray-50 p-6 rounded-3xl border border-gray-100">
+                  <div className="flex justify-between items-start mb-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center overflow-hidden border border-gray-100">
+                        {rate.profiles?.avatar_url ? (
+                          <img src={rate.profiles.avatar_url} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                        ) : (
+                          <User size={20} className="text-gray-300" />
+                        )}
+                      </div>
+                      <div>
+                        <p className="font-bold text-sm">{rate.profiles?.fullName || 'مستخدم'}</p>
+                        <p className="text-[10px] text-gray-400">{new Date(rate.created_at).toLocaleDateString('ar-SA')}</p>
+                      </div>
+                    </div>
+                    <div className="flex text-yellow-400">
+                      {[1,2,3,4,5].map(star => (
+                        <Star key={star} size={12} fill={rate.rating >= star ? "currentColor" : "none"} />
+                      ))}
+                    </div>
+                  </div>
+                  <p className="text-gray-600 text-sm leading-relaxed">{rate.comment || 'بدون تعليق'}</p>
+                </div>
+              )) : (
+                <div className="text-center py-12 text-gray-400 bg-gray-50 rounded-3xl border-2 border-dashed border-gray-100">
+                  لا توجد تقييمات بعد. كن أول من يقيم هذه الخدمة!
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <AnimatePresence>
+        {showRateModal && (
+          <RatingModal 
+            service={service} 
+            onClose={() => { setShowRateModal(false); fetchServiceDetails(); }} 
+          />
+        )}
+      </AnimatePresence>
+    </div>
+  );
+};
+
+const AboutPage = ({ aboutImage }: any) => (
   <div className="max-w-4xl mx-auto px-4 py-12">
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-16">
       <section className="text-center">
         <h1 className="text-5xl font-black mb-6">بورتسودان: <span className="gradient-text">ثغر السودان الباسم</span></h1>
         <div className="relative group">
-          <img src="https://picsum.photos/seed/portsudan/1200/600" className="w-full h-80 object-cover rounded-[40px] shadow-2xl mb-8 transition-transform group-hover:scale-[1.02] duration-700" referrerPolicy="no-referrer" />
+          <img 
+            src={aboutImage || "https://picsum.photos/seed/portsudan/1200/600"} 
+            className="w-full h-80 object-cover rounded-[40px] shadow-2xl mb-8 transition-transform group-hover:scale-[1.02] duration-700" 
+            referrerPolicy="no-referrer" 
+          />
           <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent rounded-[40px] flex items-end p-8">
             <p className="text-white font-bold text-xl">بورتسودان ليست مجرد مدينة، بل هي قلب السودان النابض.</p>
           </div>
@@ -484,6 +923,113 @@ const AboutPage = () => (
     </motion.div>
   </div>
 );
+
+const GeminiSetupPage = ({ userApiKey, onSaveApiKey }: any) => {
+  const [key, setKey] = useState(userApiKey);
+  const [isSaving, setIsSaving] = useState(false);
+  const navigate = useNavigate();
+
+  const handleSave = async () => {
+    if (!key.trim()) return;
+    setIsSaving(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        await supabase.from('profiles').update({ gemini_api_key: key }).eq('id', user.id);
+      }
+      onSaveApiKey(key);
+      alert('تم حفظ مفتاح API بنجاح! يمكنك الآن الاستمتاع بكافة ميزات الذكاء الاصطناعي.');
+      navigate('/profile');
+    } catch (error) {
+      alert('حدث خطأ أثناء الحفظ');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <div className="max-w-4xl mx-auto px-4 py-12">
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-white rounded-[40px] shadow-xl border border-gray-100 overflow-hidden">
+        <div className="bg-gradient-to-r from-blue-600 to-indigo-700 p-12 text-white text-center">
+          <Sparkles size={64} className="mx-auto mb-6 animate-pulse" />
+          <h1 className="text-4xl font-black mb-4">تفعيل قوة الذكاء الاصطناعي</h1>
+          <p className="text-blue-100 max-w-2xl mx-auto text-lg leading-relaxed">
+            استخدم مفتاح Gemini API الخاص بك لفتح آفاق جديدة في "دليل خدمتك". نحن نستخدم هذا المفتاح لتحليل إعلاناتك، تحسين البحث، وتوثيق هويتك بذكاء.
+          </p>
+        </div>
+
+        <div className="p-12">
+          <div className="grid md:grid-cols-2 gap-12 mb-12">
+            <div className="space-y-6">
+              <h3 className="text-2xl font-bold flex items-center gap-2 text-indigo-600"><Info size={24} /> كيف تحصل على المفتاح؟</h3>
+              <ol className="space-y-4 text-gray-600 list-decimal list-inside font-bold">
+                <li>انتقل إلى <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">Google AI Studio</a>.</li>
+                <li>قم بتسجيل الدخول بحساب Google الخاص بك.</li>
+                <li>اضغط على زر "Create API key".</li>
+                <li>انسخ المفتاح والصقه في الحقل أدناه.</li>
+              </ol>
+              <div className="p-4 bg-blue-50 rounded-2xl border border-blue-100">
+                <p className="text-xs text-blue-700 leading-relaxed">
+                  <strong>ملاحظة:</strong> المفتاح المجاني كافٍ تماماً لاستخدام كافة ميزات المنصة. نحن نستخدم موديل <strong>Gemini 1.5 Flash</strong> لضمان السرعة والكفاءة.
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-6">
+              <h3 className="text-2xl font-bold flex items-center gap-2 text-green-600"><Sparkles size={24} /> ماذا ستحصل عليه؟</h3>
+              <ul className="space-y-4">
+                <li className="flex items-start gap-3 bg-gray-50 p-4 rounded-2xl">
+                  <div className="bg-blue-100 p-2 rounded-xl text-blue-600"><Activity size={20} /></div>
+                  <div>
+                    <p className="font-bold text-sm">طبيب الإعلانات (Ad Doctor)</p>
+                    <p className="text-xs text-gray-500">تحليل فوري لإعلانك للتأكد من جودته ومطابقته للسياسات.</p>
+                  </div>
+                </li>
+                <li className="flex items-start gap-3 bg-gray-50 p-4 rounded-2xl">
+                  <div className="bg-purple-100 p-2 rounded-xl text-purple-600"><Search size={20} /></div>
+                  <div>
+                    <p className="font-bold text-sm">البحث الذكي (Smart Search)</p>
+                    <p className="text-xs text-gray-500">ابحث باللغة الطبيعية وسيفهم الذكاء الاصطناعي ما تحتاجه بالضبط.</p>
+                  </div>
+                </li>
+                <li className="flex items-start gap-3 bg-gray-50 p-4 rounded-2xl">
+                  <div className="bg-green-100 p-2 rounded-xl text-green-600"><ShieldCheck size={20} /></div>
+                  <div>
+                    <p className="font-bold text-sm">التوثيق التلقائي للهوية</p>
+                    <p className="text-xs text-gray-500">ارفع هويتك وسيقوم الذكاء الاصطناعي بمطابقتها مع بياناتك فوراً.</p>
+                  </div>
+                </li>
+              </ul>
+            </div>
+          </div>
+
+          <div className="max-w-2xl mx-auto">
+            <label className="block text-sm font-black mb-3 text-gray-700">أدخل مفتاح Gemini API هنا:</label>
+            <div className="flex gap-3">
+              <input 
+                type="password" 
+                value={key}
+                onChange={(e) => setKey(e.target.value)}
+                placeholder="AIzaSy..."
+                className="flex-1 p-4 rounded-2xl bg-gray-50 border border-gray-200 outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+              />
+              <button 
+                onClick={handleSave}
+                disabled={isSaving || !key.trim()}
+                className="bg-blue-600 text-white px-8 py-4 rounded-2xl font-bold shadow-lg hover:bg-blue-700 transition-all disabled:opacity-50"
+              >
+                {isSaving ? 'جاري الحفظ...' : 'حفظ وتفعيل'}
+              </button>
+            </div>
+            <p className="text-[10px] text-gray-400 mt-4 text-center">
+              يتم تشفير المفتاح وحفظه بشكل آمن في حسابك. يمكنك حذفه أو تعديله في أي وقت من صفحة الملف الشخصي.
+            </p>
+          </div>
+        </div>
+      </motion.div>
+    </div>
+  );
+};
 
 const ProfilePage = ({ user, userApiKey, onSaveApiKey }: any) => {
   const [showAddAd, setShowAddAd] = useState(false);
@@ -548,7 +1094,48 @@ const ProfilePage = ({ user, userApiKey, onSaveApiKey }: any) => {
   };
 
   const handleVerify = async () => {
-    // ... (existing handleVerify logic)
+    if (!idFile) {
+      alert('يرجى اختيار صورة الهوية أولاً');
+      return;
+    }
+    setIsVerifying(true);
+    try {
+      // 1. Convert file to base64 for Gemini
+      const reader = new FileReader();
+      const base64Promise = new Promise<string>((resolve) => {
+        reader.onload = () => resolve((reader.result as string).split(',')[1]);
+        reader.readAsDataURL(idFile);
+      });
+      const base64 = await base64Promise;
+
+      // 2. Verify with Gemini
+      const resultStr = await verifyID(base64, { fullName: user.fullName }, userApiKey);
+      if (resultStr) {
+        const result = JSON.parse(resultStr.replace(/```json|```/g, ''));
+        if (result.isMatch && result.confidence > 0.8) {
+          // 3. Upload to Cloudinary for admin record
+          const cloudinaryUrl = await uploadToCloudinary(idFile);
+          
+          // 4. Update Supabase
+          const { error } = await supabase
+            .from('profiles')
+            .update({ is_verified: true, avatar_url: cloudinaryUrl })
+            .eq('id', user.id);
+
+          if (!error) {
+            alert('تم توثيق حسابك بنجاح! شكراً لتعاونك.');
+          } else {
+            alert('حدث خطأ أثناء تحديث البيانات');
+          }
+        } else {
+          alert(`فشل التوثيق: ${result.reason}`);
+        }
+      }
+    } catch (error) {
+      alert('حدث خطأ أثناء عملية التوثيق');
+    } finally {
+      setIsVerifying(false);
+    }
   };
 
   return (
@@ -629,6 +1216,26 @@ const ProfilePage = ({ user, userApiKey, onSaveApiKey }: any) => {
           <div className="grid md:grid-cols-2 gap-8">
             <div className="space-y-6">
               {/* Provider Analytics */}
+              {userApiKey && (
+                <div className="p-6 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-[40px] text-white shadow-xl">
+                  <h3 className="font-bold mb-4 flex items-center gap-2"><Activity size={20} /> لوحة تحكم القوة (AI Telemetry)</h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-white/10 p-4 rounded-2xl border border-white/20">
+                      <p className="text-[10px] text-blue-100 font-bold">عمليات الذكاء الاصطناعي</p>
+                      <p className="text-2xl font-black">{user?.ai_usage_count || 0}</p>
+                    </div>
+                    <div className="bg-white/10 p-4 rounded-2xl border border-white/20">
+                      <p className="text-[10px] text-blue-100 font-bold">نقاط الذكاء</p>
+                      <p className="text-2xl font-black">{(user?.ai_usage_count || 0) * 10}</p>
+                    </div>
+                  </div>
+                  <div className="mt-4 h-2 bg-white/20 rounded-full overflow-hidden">
+                    <div className="h-full bg-blue-400" style={{ width: `${Math.min((user?.ai_usage_count || 0) * 2, 100)}%` }}></div>
+                  </div>
+                  <p className="text-[8px] text-blue-200 mt-2">توضح هذه اللوحة مدى استفادتك من ميزات الذكاء الاصطناعي في تطوير عملك.</p>
+                </div>
+              )}
+
               <div className="p-6 bg-white rounded-3xl border border-gray-100 shadow-sm">
                 <h3 className="font-bold mb-4 flex items-center gap-2 text-indigo-600"><BarChart size={20} /> تحليلات الإعلانات</h3>
                 <div className="grid grid-cols-2 gap-4">
@@ -662,15 +1269,16 @@ const ProfilePage = ({ user, userApiKey, onSaveApiKey }: any) => {
 
               <div className="p-6 bg-gray-50 rounded-2xl border border-gray-100">
                 <h3 className="font-bold mb-4 flex items-center gap-2"><Settings size={20} className="text-gray-600" /> إعدادات Gemini</h3>
-                <input 
-                  type="password"
-                  value={userApiKey}
-                  onChange={(e) => onSaveApiKey(e.target.value)}
-                  placeholder="مفتاح API الخاص بك"
-                  className="w-full px-4 py-2 rounded-xl border border-gray-200 mb-2"
-                />
-                <p className="text-[10px] text-gray-400">مطلوب لتفعيل الإعلانات الذكية والتوثيق التلقائي.</p>
+                <Link 
+                  to="/gemini-setup"
+                  className="w-full bg-white border border-gray-200 text-gray-700 py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-gray-100 transition-colors"
+                >
+                  <Sparkles size={18} className="text-blue-600" /> {userApiKey ? 'تعديل إعدادات الذكاء الاصطناعي' : 'تفعيل الذكاء الاصطناعي'}
+                </Link>
+                <p className="text-[10px] text-gray-400 mt-2">مطلوب لتفعيل الإعلانات الذكية والتوثيق التلقائي.</p>
               </div>
+
+              <AIHistorySection userApiKey={userApiKey} />
             </div>
 
             <div className="space-y-6">
@@ -728,10 +1336,97 @@ const ProfilePage = ({ user, userApiKey, onSaveApiKey }: any) => {
   );
 };
 
-const ForumPage = () => {
+const ForumPage = ({ userApiKey, professions, neighborhoods }: any) => {
   const [posts, setPosts] = useState<any[]>([]);
   const [newPost, setNewPost] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [isConverting, setIsConverting] = useState(false);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    fetchPosts();
+  }, []);
+
+  const fetchPosts = async () => {
+    const { data } = await supabase
+      .from('forum_posts')
+      .select('*, profiles(fullName, avatar_url)')
+      .order('created_at', { ascending: false });
+    if (data) setPosts(data);
+    setLoading(false);
+  };
+
+  const handlePost = async () => {
+    if (!newPost.trim()) return;
+
+    setLoading(true);
+    try {
+      // Content Moderation for Forum Posts
+      const moderationResult = await moderateContent(newPost);
+      if (moderationResult?.includes('UNSAFE')) {
+        const reason = moderationResult.split('UNSAFE:')[1] || 'محتوى غير لائق';
+        alert(`عذراً، لا يمكن نشر هذا المنشور. السبب: ${reason}`);
+        return;
+      }
+
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { error } = await supabase.from('forum_posts').insert({
+        user_id: user.id,
+        content: newPost
+      });
+
+      if (!error) {
+        setNewPost('');
+        fetchPosts();
+      }
+    } catch (error) {
+      alert('حدث خطأ أثناء النشر');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleConvertToRequest = async () => {
+    if (!newPost.trim()) return;
+    if (!userApiKey) {
+      alert('يرجى إضافة مفتاح Gemini API لاستخدام هذه الميزة');
+      return;
+    }
+
+    setIsConverting(true);
+    try {
+      const ai = getGeminiAI(userApiKey);
+      if (!ai) return;
+
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: `
+          Analyze this forum post and extract a service request.
+          Post: "${newPost}"
+          
+          Return a JSON object:
+          {
+            "title": "Short title",
+            "description": "Detailed description",
+            "profession": "One of: ${professions.join(', ')}",
+            "neighborhood": "One of: ${neighborhoods.join(', ')}"
+          }
+        `,
+      });
+
+      const result = JSON.parse(response.text.replace(/```json|```/g, ''));
+      if (result) {
+        alert(`تم تحليل طلبك بنجاح!\nالعنوان: ${result.title}\nالمهنة: ${result.profession}\nيمكنك الآن إكمال النشر من صفحة إضافة إعلان.`);
+        console.log("Smart Request Data:", result);
+      }
+    } catch (error) {
+      alert('فشل تحليل المنشور');
+    } finally {
+      setIsConverting(false);
+    }
+  };
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-12">
@@ -750,37 +1445,42 @@ const ForumPage = () => {
         />
         <div className="flex justify-end gap-3">
           <button 
-            onClick={() => alert('سيتم تحويل منشورك لطلب خدمة ذكي...')}
-            className="bg-purple-100 text-purple-700 px-6 py-2 rounded-xl font-bold flex items-center gap-2 text-sm"
+            onClick={handleConvertToRequest}
+            disabled={isConverting || !newPost}
+            className="bg-purple-100 text-purple-700 px-6 py-2 rounded-xl font-bold flex items-center gap-2 text-sm disabled:opacity-50"
           >
-            <Sparkles size={16} /> تحويل لطلب خدمة
+            <Sparkles size={16} /> {isConverting ? 'جاري التحليل...' : 'تحويل لطلب خدمة ذكي'}
           </button>
-          <button className="bg-blue-600 text-white px-8 py-2 rounded-xl font-bold flex items-center gap-2">
-            <Send size={18} /> نشر في المنتدى
+          <button 
+            onClick={handlePost}
+            disabled={loading || !newPost}
+            className="bg-blue-600 text-white px-8 py-2 rounded-xl font-bold flex items-center gap-2 disabled:opacity-50"
+          >
+            <Send size={18} /> {loading ? 'جاري النشر...' : 'نشر في المنتدى'}
           </button>
         </div>
       </div>
 
       <div className="space-y-6">
-        {[1, 2, 3].map(i => (
-          <div key={i} className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
+        {loading ? (
+          <div className="text-center py-12 text-gray-400">جاري تحميل المنشورات...</div>
+        ) : posts.map(post => (
+          <motion.div key={post.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center text-gray-400">
-                <User size={20} />
+              <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center overflow-hidden">
+                {post.profiles?.avatar_url ? (
+                  <img src={post.profiles.avatar_url} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                ) : (
+                  <User size={20} className="text-gray-400" />
+                )}
               </div>
               <div>
-                <p className="font-bold text-sm">مواطن بورتسوداني</p>
-                <p className="text-[10px] text-gray-400">منذ {i * 2} ساعات • حي المطار</p>
+                <p className="font-bold text-sm">{post.profiles?.fullName || 'مستخدم'}</p>
+                <p className="text-[10px] text-gray-400">{new Date(post.created_at).toLocaleDateString('ar-SA')}</p>
               </div>
             </div>
-            <p className="text-gray-700 leading-relaxed mb-4">
-              يا جماعة بورتسودان محتاجة لزيادة في عدد فنيي الطاقة الشمسية، خصوصاً مع دخول الصيف. هل في مراكز تدريب بتوفر دورات في المجال ده؟
-            </p>
-            <div className="flex items-center gap-4 text-gray-500 text-xs">
-              <button className="flex items-center gap-1 hover:text-blue-600"><MessageCircle size={14} /> 12 تعليق</button>
-              <button className="flex items-center gap-1 hover:text-red-600"><Star size={14} /> 24 إعجاب</button>
-            </div>
-          </div>
+            <p className="text-gray-700 leading-relaxed">{post.content}</p>
+          </motion.div>
         ))}
       </div>
     </div>
@@ -795,11 +1495,39 @@ const RatingModal = ({ service, onClose }: any) => {
   const handleSubmit = async () => {
     if (rating === 0) return;
     setSubmitting(true);
-    // Synergy: Reward points for rating
-    setTimeout(() => {
-      alert('شكراً لتقييمك! لقد حصلت على 10 نقاط مكافأة لمساهمتك في جودة المجتمع.');
-      onClose();
-    }, 1000);
+    
+    try {
+      // Content Moderation for Rating Comments
+      if (comment.trim()) {
+        const moderationResult = await moderateContent(comment);
+        if (moderationResult?.includes('UNSAFE')) {
+          const reason = moderationResult.split('UNSAFE:')[1] || 'محتوى غير لائق';
+          alert(`عذراً، تم رفض التعليق. السبب: ${reason}`);
+          return;
+        }
+      }
+
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { error } = await supabase.from('ratings').insert({
+        ad_id: service.id,
+        user_id: user.id,
+        rating,
+        comment
+      });
+
+      if (error) {
+        alert('حدث خطأ أثناء حفظ التقييم');
+      } else {
+        alert('شكراً لتقييمك! لقد حصلت على 10 نقاط مكافأة لمساهمتك في جودة المجتمع.');
+        onClose();
+      }
+    } catch (error) {
+      alert('حدث خطأ أثناء معالجة التقييم');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -883,7 +1611,7 @@ const ContactAdminModal = ({ onClose }: any) => {
   );
 };
 
-const AddAdModal = ({ onClose, userApiKey }: any) => {
+const AddAdModal = ({ onClose, userApiKey, neighborhoods, professions }: any) => {
   const [step, setStep] = useState(1);
   const [adType, setAdType] = useState<'offer' | 'request'>('offer');
   const [isSmart, setIsSmart] = useState(false);
@@ -891,16 +1619,66 @@ const AddAdModal = ({ onClose, userApiKey }: any) => {
   const [isTraining, setIsTraining] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
+  const [isImproving, setIsImproving] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [tier, setTier] = useState<'normal' | 'premium'>('normal');
   const [formData, setFormData] = useState({
     title: '',
     description: '',
-    profession: PROFESSIONS[0],
-    neighborhood: NEIGHBORHOODS[0],
+    profession: professions?.[0] || PROFESSIONS[0],
+    neighborhood: neighborhoods?.[0] || NEIGHBORHOODS[0],
     phone: '',
     image_url: '',
     payment_receipt: null as File | null
   });
+
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [adDiagnosis, setAdDiagnosis] = useState<string | null>(null);
+
+  const handleAdDoctor = async () => {
+    if (!userApiKey) {
+      alert('يرجى إضافة مفتاح API لاستخدام طبيب الإعلان');
+      return;
+    }
+    if (!formData.title || !formData.description) {
+      alert('يرجى إدخال العنوان والوصف أولاً');
+      return;
+    }
+
+    setIsAnalyzing(true);
+    try {
+      const ai = new GoogleGenAI({ apiKey: userApiKey });
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: `
+          أنت "طبيب الإعلانات" لمنصة خدمات في بورتسودان.
+          قم بتحليل هذا الإعلان وتقديم نصائح سريعة لتحسينه لجذب الزبائن:
+          العنوان: ${formData.title}
+          الوصف: ${formData.description}
+          المهنة: ${formData.profession}
+          الحي: ${formData.neighborhood}
+          
+          قدم تقريراً مختصراً جداً (نقاط) باللغة العربية السودانية الودودة.
+        `,
+      });
+      setAdDiagnosis(response.text);
+      
+      // Log to history
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        await supabase.from('ai_logs').insert({
+          user_id: user.id,
+          feature: 'Ad Doctor',
+          prompt: formData.title,
+          response: response.text
+        });
+      }
+    } catch (error) {
+      alert('فشل تحليل الإعلان');
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
 
   const generateAIImage = async () => {
     if (!userApiKey || !formData.title) {
@@ -944,26 +1722,84 @@ const AddAdModal = ({ onClose, userApiKey }: any) => {
     recognition.start();
   };
 
+  const handleImproveAd = async () => {
+    if (!userApiKey || !formData.title || !formData.description) {
+      alert('يرجى إدخال العنوان والوصف ومفتاح API أولاً');
+      return;
+    }
+    setIsImproving(true);
+    try {
+      const result = await improveAd(formData.title, formData.description, formData.profession, userApiKey);
+      if (result) {
+        setFormData(prev => ({ ...prev, description: result }));
+        alert('تم تحسين الوصف بنجاح!');
+      }
+    } catch (error) {
+      alert('فشل تحسين الوصف');
+    } finally {
+      setIsImproving(false);
+    }
+  };
+
   const isFormComplete = formData.title && formData.description && formData.phone && (step < 3 || formData.payment_receipt);
 
   const handleSubmit = async () => {
     if (!isFormComplete) return;
 
-    // Content Moderation & Fraud Detection with Gemini
-    if (userApiKey) {
+    setIsSubmitting(true);
+    try {
+      // Content Moderation & Fraud Detection with Gemini (Always runs using system key if user key is missing)
       const moderationResult = await moderateContent(
         `Title: ${formData.title}\nDescription: ${formData.description}`, 
-        undefined, 
+        formData.image_url.startsWith('data:') ? formData.image_url : undefined, 
         userApiKey
       );
-      if (moderationResult?.includes('UNSAFE') || moderationResult?.includes('FRAUD')) {
-        alert('عذراً، تم رفض الإعلان. اكتشف نظام الأمان محتوى مشبوهاً أو غير لائق.');
+      
+      if (moderationResult?.includes('UNSAFE')) {
+        const reason = moderationResult.split('UNSAFE:')[1] || 'محتوى غير لائق';
+        alert(`عذراً، تم رفض الإعلان. السبب: ${reason}`);
         return;
       }
-    }
 
-    alert('تم إرسال إعلانك للمراجعة بنجاح! سيتم إخطار مقدمي الخدمات المطابقين لطلبك فوراً.');
-    onClose();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      let finalImageUrl = formData.image_url;
+      if (formData.image_url.startsWith('data:')) {
+        const uploadedUrl = await uploadToCloudinary(formData.image_url);
+        if (uploadedUrl) finalImageUrl = uploadedUrl;
+      }
+
+      const { error } = await supabase.from('ads').insert({
+        user_id: user.id,
+        title: formData.title,
+        description: formData.description,
+        profession: formData.profession,
+        neighborhood: formData.neighborhood,
+        phone: formData.phone,
+        type: adType,
+        is_premium: tier === 'premium',
+        is_productive_family: isProductive,
+        is_training: isTraining,
+        image_url: finalImageUrl,
+        status: 'approved' 
+      });
+
+      if (error) {
+        alert('حدث خطأ أثناء نشر الإعلان: ' + error.message);
+      } else {
+        // Send notification via CallMeBot
+        const notificationMsg = `إعلان جديد في دليل خدمتك!\nالعنوان: ${formData.title}\nالمهنة: ${formData.profession}\nالحي: ${formData.neighborhood}\nالنوع: ${adType === 'offer' ? 'عرض' : 'طلب'}`;
+        sendWhatsAppNotification(notificationMsg);
+
+        alert('تم نشر إعلانك بنجاح! سيتم إخطار مقدمي الخدمات المطابقين لطلبك فوراً.');
+        onClose();
+      }
+    } catch (error) {
+      alert('حدث خطأ أثناء معالجة الإعلان');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -991,7 +1827,35 @@ const AddAdModal = ({ onClose, userApiKey }: any) => {
                 <h3 className="font-bold flex items-center gap-2"><Sparkles size={20} className="text-purple-600" /> إعلان ذكي (Gemini)</h3>
                 <input type="checkbox" checked={isSmart} onChange={e => setIsSmart(e.target.checked)} className="w-6 h-6 accent-purple-600" />
               </div>
-              <p className="text-sm text-purple-700">سيقوم الذكاء الاصطناعي بكتابة وصف احترافي وجذاب لإعلانك بناءً على عنوانك ومهنتك.</p>
+              <p className="text-sm text-purple-700 mb-4">سيقوم الذكاء الاصطناعي بكتابة وصف احترافي وجذاب لإعلانك بناءً على عنوانك ومهنتك.</p>
+              
+              <AIGuard userApiKey={userApiKey}>
+                <div className="flex gap-2">
+                  <button 
+                    onClick={handleAdDoctor}
+                    disabled={isAnalyzing}
+                    className="flex-1 bg-white border border-purple-200 text-purple-700 py-3 rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-purple-100 transition-colors"
+                  >
+                    <Stethoscope size={18} /> {isAnalyzing ? 'جاري الفحص...' : 'طبيب الإعلان'}
+                  </button>
+                  <button 
+                    onClick={handleImproveAd}
+                    disabled={isImproving}
+                    className="flex-1 bg-purple-600 text-white py-3 rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-purple-700 transition-colors"
+                  >
+                    <Sparkles size={18} /> {isImproving ? 'تحسين الوصف' : 'تحسين ذكي'}
+                  </button>
+                </div>
+              </AIGuard>
+
+              {adDiagnosis && (
+                <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="mt-4 p-4 bg-white rounded-2xl border border-purple-100 text-xs text-purple-900">
+                  <h4 className="font-bold mb-2 flex items-center gap-1"><Info size={14} /> نصائح الطبيب:</h4>
+                  <div className="prose prose-sm prose-purple">
+                    <Markdown>{adDiagnosis}</Markdown>
+                  </div>
+                </motion.div>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -1014,13 +1878,13 @@ const AddAdModal = ({ onClose, userApiKey }: any) => {
               <div>
                 <label className="block text-sm font-bold mb-1">المهنة</label>
                 <select value={formData.profession} onChange={e => setFormData({...formData, profession: e.target.value})} className="w-full p-3 rounded-xl border border-gray-200">
-                  {PROFESSIONS.map(p => <option key={p} value={p}>{p}</option>)}
+                  {professions.map((p: string) => <option key={p} value={p}>{p}</option>)}
                 </select>
               </div>
               <div>
                 <label className="block text-sm font-bold mb-1">الحي</label>
                 <select value={formData.neighborhood} onChange={e => setFormData({...formData, neighborhood: e.target.value})} className="w-full p-3 rounded-xl border border-gray-200">
-                  {NEIGHBORHOODS.map(n => <option key={n} value={n}>{n}</option>)}
+                  {neighborhoods.map((n: string) => <option key={n} value={n}>{n}</option>)}
                 </select>
               </div>
             </div>
@@ -1031,12 +1895,21 @@ const AddAdModal = ({ onClose, userApiKey }: any) => {
             <div>
               <div className="flex justify-between items-center mb-1">
                 <label className="block text-sm font-bold">الوصف</label>
-                <button 
-                  onClick={startVoiceRecording}
-                  className={`flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-full transition-all ${isRecording ? 'bg-red-100 text-red-600 animate-pulse' : 'bg-blue-100 text-blue-600'}`}
-                >
-                  <Send size={10} /> {isRecording ? 'جاري الاستماع...' : 'إملاء صوتي'}
-                </button>
+                <div className="flex gap-2">
+                  <button 
+                    onClick={handleImproveAd}
+                    disabled={isImproving}
+                    className="flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-full bg-purple-100 text-purple-700 hover:bg-purple-200 transition-all disabled:opacity-50"
+                  >
+                    <Sparkles size={10} /> {isImproving ? 'جاري التحسين...' : 'تحسين ذكي'}
+                  </button>
+                  <button 
+                    onClick={startVoiceRecording}
+                    className={`flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-full transition-all ${isRecording ? 'bg-red-100 text-red-600 animate-pulse' : 'bg-blue-100 text-blue-600'}`}
+                  >
+                    <Send size={10} /> {isRecording ? 'جاري الاستماع...' : 'إملاء صوتي'}
+                  </button>
+                </div>
               </div>
               <textarea rows={4} value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} className="w-full p-3 rounded-xl border border-gray-200" placeholder="اكتب تفاصيل خدمتك هنا..." />
             </div>
@@ -1047,13 +1920,35 @@ const AddAdModal = ({ onClose, userApiKey }: any) => {
             <div>
               <div className="flex justify-between items-center mb-1">
                 <label className="block text-sm font-bold">صورة الإعلان</label>
-                <button 
-                  onClick={generateAIImage}
-                  disabled={isGeneratingImage}
-                  className="text-[10px] font-bold bg-purple-100 text-purple-700 px-3 py-1 rounded-full flex items-center gap-1 hover:bg-purple-200 transition-all"
-                >
-                  <Sparkles size={10} /> {isGeneratingImage ? 'جاري التوليد...' : 'توليد صورة بالذكاء الاصطناعي'}
-                </button>
+                <div className="flex gap-2">
+                  <input 
+                    type="file" 
+                    id="ad-image-upload" 
+                    className="hidden" 
+                    accept="image/*"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        const reader = new FileReader();
+                        reader.onload = () => setFormData({...formData, image_url: reader.result as string});
+                        reader.readAsDataURL(file);
+                      }
+                    }}
+                  />
+                  <label 
+                    htmlFor="ad-image-upload"
+                    className="text-[10px] font-bold bg-blue-100 text-blue-700 px-3 py-1 rounded-full flex items-center gap-1 cursor-pointer hover:bg-blue-200 transition-all"
+                  >
+                    <ImageIcon size={10} /> رفع صورة
+                  </label>
+                  <button 
+                    onClick={generateAIImage}
+                    disabled={isGeneratingImage}
+                    className="text-[10px] font-bold bg-purple-100 text-purple-700 px-3 py-1 rounded-full flex items-center gap-1 hover:bg-purple-200 transition-all disabled:opacity-50"
+                  >
+                    <Sparkles size={10} /> {isGeneratingImage ? 'جاري التوليد...' : 'توليد ذكي'}
+                  </button>
+                </div>
               </div>
               {formData.image_url ? (
                 <div className="relative group">
@@ -1101,7 +1996,13 @@ const AddAdModal = ({ onClose, userApiKey }: any) => {
             <div className="flex gap-3">
               <button onClick={() => setStep(2)} className="flex-1 bg-gray-100 py-4 rounded-2xl font-bold">السابق</button>
               {isFormComplete && (
-                <button onClick={handleSubmit} className="flex-1 bg-green-600 text-white py-4 rounded-2xl font-bold shadow-lg">نشر الإعلان</button>
+                <button 
+                  onClick={handleSubmit} 
+                  disabled={isSubmitting}
+                  className="flex-1 bg-green-600 text-white py-4 rounded-2xl font-bold shadow-lg disabled:opacity-50"
+                >
+                  {isSubmitting ? 'جاري النشر...' : 'نشر الإعلان'}
+                </button>
               )}
             </div>
           </div>
@@ -1111,10 +2012,36 @@ const AddAdModal = ({ onClose, userApiKey }: any) => {
   );
 };
 
-const AuthPage = ({ onLogin }: any) => {
+const AuthPage = () => {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [fullName, setFullName] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleAuth = async () => {
+    setLoading(true);
+    try {
+      if (isLogin) {
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            data: { fullName }
+          }
+        });
+        if (error) throw error;
+        alert('تم إنشاء الحساب! يرجى تأكيد بريدك الإلكتروني إذا تطلب الأمر.');
+      }
+    } catch (error: any) {
+      alert(error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
@@ -1129,13 +2056,23 @@ const AuthPage = ({ onLogin }: any) => {
 
         <div className="space-y-4">
           {!isLogin && (
-            <input type="text" placeholder="الاسم الكامل" className="w-full px-6 py-4 rounded-2xl bg-gray-50 border-none focus:ring-2 focus:ring-blue-500 outline-none" />
+            <input 
+              type="text" 
+              value={fullName}
+              onChange={e => setFullName(e.target.value)}
+              placeholder="الاسم الكامل" 
+              className="w-full px-6 py-4 rounded-2xl bg-gray-50 border-none focus:ring-2 focus:ring-blue-500 outline-none" 
+            />
           )}
           <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="البريد الإلكتروني" className="w-full px-6 py-4 rounded-2xl bg-gray-50 border-none focus:ring-2 focus:ring-blue-500 outline-none" />
           <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="كلمة المرور" className="w-full px-6 py-4 rounded-2xl bg-gray-50 border-none focus:ring-2 focus:ring-blue-500 outline-none" />
           
-          <button onClick={() => onLogin({ fullName: 'حذيفة' })} className="w-full bg-blue-600 text-white py-4 rounded-2xl font-bold text-lg shadow-xl hover:bg-blue-700 transition-all">
-            {isLogin ? 'دخول' : 'تسجيل حساب'}
+          <button 
+            onClick={handleAuth} 
+            disabled={loading}
+            className="w-full bg-blue-600 text-white py-4 rounded-2xl font-bold text-lg shadow-xl hover:bg-blue-700 transition-all disabled:opacity-50"
+          >
+            {loading ? 'جاري المعالجة...' : (isLogin ? 'دخول' : 'تسجيل حساب')}
           </button>
 
           <button onClick={() => setIsLogin(!isLogin)} className="w-full text-blue-600 font-bold py-2">
@@ -1147,7 +2084,7 @@ const AuthPage = ({ onLogin }: any) => {
   );
 };
 
-const NotificationsModal = ({ onClose }: any) => (
+const NotificationsModal = ({ onClose, userApiKey }: any) => (
   <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
     <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} className="bg-white rounded-3xl w-full max-w-md p-6 shadow-2xl">
       <div className="flex justify-between items-center mb-6">
@@ -1155,6 +2092,22 @@ const NotificationsModal = ({ onClose }: any) => (
         <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full"><X /></button>
       </div>
       <div className="space-y-4">
+        {!userApiKey && (
+          <div className="p-4 bg-amber-50 rounded-2xl border border-amber-100 flex gap-3">
+            <Sparkles className="text-amber-600 shrink-0" />
+            <div>
+              <p className="text-sm font-bold text-amber-900">تفعيل ميزات الذكاء الاصطناعي</p>
+              <p className="text-xs text-amber-700 mb-2">لم تقم بإضافة مفتاح Gemini API بعد. أضفه الآن لتفعيل البحث الذكي وطبيب الإعلانات.</p>
+              <Link 
+                to="/gemini-setup" 
+                onClick={onClose}
+                className="text-[10px] font-bold text-amber-600 underline flex items-center gap-1"
+              >
+                اضغط هنا للانتقال لصفحة الإعدادات <ArrowLeft size={10} />
+              </Link>
+            </div>
+          </div>
+        )}
         <div className="p-4 bg-green-50 rounded-2xl border border-green-100 flex gap-3">
           <CheckCircle2 className="text-green-600 shrink-0" />
           <div>
@@ -1190,28 +2143,83 @@ export default function App() {
   const [showContactAdmin, setShowContactAdmin] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [userApiKey, setUserApiKey] = useState(localStorage.getItem('gemini_api_key') || '');
+  const [siteImages, setSiteImages] = useState({ main: '', about: '' });
+  const [dynamicNeighborhoods, setDynamicNeighborhoods] = useState<string[]>(NEIGHBORHOODS);
+  const [dynamicProfessions, setDynamicProfessions] = useState<string[]>(PROFESSIONS);
 
   useEffect(() => {
-    // Simulate auth check
-    const savedUser = localStorage.getItem('user');
-    if (savedUser) setUser(JSON.parse(savedUser));
-    setLoading(false);
+    const fetchReferenceData = async () => {
+      const { data: nData } = await supabase.from('neighborhoods').select('name').order('name');
+      const { data: pData } = await supabase.from('professions').select('name').order('name');
+      
+      if (nData && nData.length > 0) setDynamicNeighborhoods(nData.map(n => n.name));
+      if (pData && pData.length > 0) setDynamicProfessions(pData.map(p => p.name));
+    };
+    fetchReferenceData();
   }, []);
 
-  const handleLogin = (userData: any) => {
-    const fullUser = { ...userData, id: '1', role: 'user', is_verified: false };
-    setUser(fullUser);
-    localStorage.setItem('user', JSON.stringify(fullUser));
-  };
+  useEffect(() => {
+    const loadSiteImages = async () => {
+      const savedImages = localStorage.getItem('site_images_portsudan');
+      if (savedImages) {
+        setSiteImages(JSON.parse(savedImages));
+      } else if (userApiKey) {
+        try {
+          const images = await generatePortSudanImages();
+          setSiteImages({ main: images.mainImage, about: images.aboutImage });
+          localStorage.setItem('site_images_portsudan', JSON.stringify({ main: images.mainImage, about: images.aboutImage }));
+        } catch (error) {
+          console.error("Error generating site images:", error);
+        }
+      }
+    };
+    loadSiteImages();
+  }, [userApiKey]);
 
-  const handleLogout = () => {
+  useEffect(() => {
+    // Real Supabase Auth listener
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (session?.user) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', session.user.id)
+          .single();
+        
+        if (profile) {
+          setUser(profile);
+          if (profile.gemini_api_key) {
+            setUserApiKey(profile.gemini_api_key);
+            localStorage.setItem('gemini_api_key', profile.gemini_api_key);
+          }
+        } else {
+          // Fallback if profile trigger hasn't finished
+          setUser({
+            id: session.user.id,
+            fullName: session.user.user_metadata.fullName || 'مستخدم جديد',
+            points: 150,
+            role: 'user',
+            is_verified: false
+          });
+        }
+      } else {
+        setUser(null);
+      }
+      setLoading(false);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
     setUser(null);
-    localStorage.removeItem('user');
+    localStorage.removeItem('gemini_api_key');
   };
 
   if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div></div>;
 
-  if (!user) return <AuthPage onLogin={handleLogin} />;
+  if (!user) return <AuthPage />;
 
   return (
     <Router>
@@ -1221,16 +2229,18 @@ export default function App() {
         onOpenNotifications={() => setShowNotifications(true)}
       >
         <Routes>
-          <Route path="/" element={<LandingPage />} />
-          <Route path="/about" element={<AboutPage />} />
-          <Route path="/forum" element={<ForumPage />} />
+          <Route path="/" element={<LandingPage userApiKey={userApiKey} mainImage={siteImages.main} neighborhoods={dynamicNeighborhoods} professions={dynamicProfessions} />} />
+          <Route path="/service/:id" element={<ServiceDetailPage userApiKey={userApiKey} />} />
+          <Route path="/about" element={<AboutPage aboutImage={siteImages.about} />} />
+          <Route path="/forum" element={<ForumPage userApiKey={userApiKey} professions={dynamicProfessions} neighborhoods={dynamicNeighborhoods} />} />
           <Route path="/profile" element={<ProfilePage user={user} userApiKey={userApiKey} onSaveApiKey={(key: string) => { setUserApiKey(key); localStorage.setItem('gemini_api_key', key); }} />} />
+          <Route path="/gemini-setup" element={<GeminiSetupPage userApiKey={userApiKey} onSaveApiKey={(key: string) => { setUserApiKey(key); localStorage.setItem('gemini_api_key', key); }} />} />
           <Route path="*" element={<Navigate to="/" />} />
         </Routes>
       </Layout>
       <AnimatePresence>
-        {showNotifications && <NotificationsModal onClose={() => setShowNotifications(false)} />}
-        {showAddAd && <AddAdModal onClose={() => setShowAddAd(false)} userApiKey={userApiKey} />}
+        {showNotifications && <NotificationsModal onClose={() => setShowNotifications(false)} userApiKey={userApiKey} />}
+        {showAddAd && <AddAdModal onClose={() => setShowAddAd(false)} userApiKey={userApiKey} neighborhoods={dynamicNeighborhoods} professions={dynamicProfessions} />}
         {showContactAdmin && <ContactAdminModal onClose={() => setShowContactAdmin(false)} />}
       </AnimatePresence>
     </Router>
