@@ -1,0 +1,17 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: var(--font-cairo), ui-sans-serif, system-ui, sans-serif;
+  --color-burgundy: #800020;
+  --color-gray-custom: #808080;
+}
+
+@layer base {
+  body {
+    @apply bg-white text-gray-900 antialiased;
+  }
+}
+
+.btn-burgundy {
+  @apply bg-burgundy text-white px-6 py-3 rounded-xl font-bold hover:opacity-90 transition-all shadow-lg;
+}

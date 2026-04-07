@@ -1,7 +1,7 @@
 import { GoogleGenAI } from "@google/genai";
 
 const ai = new GoogleGenAI({ 
-  apiKey: (import.meta as any).env.VITE_GEMINI_API_KEY || (import.meta as any).env.GEMINI_API_KEY || process.env.GEMINI_API_KEY 
+  apiKey: process.env.GEMINI_API_KEY!
 });
 
 export async function generatePortSudanImages() {
@@ -22,13 +22,33 @@ export async function generatePortSudanImages() {
   let mainImage = "";
   let aboutImage = "";
 
-  for (const part of mainResponse.candidates[0].content.parts) {
+  const mainParts = mainResponse.candidates?.[0]?.content?.parts || [];
+  for (const part of mainParts) {
     if (part.inlineData) mainImage = `data:image/png;base64,${part.inlineData.data}`;
   }
 
-  for (const part of aboutResponse.candidates[0].content.parts) {
+  const aboutParts = aboutResponse.candidates?.[0]?.content?.parts || [];
+  for (const part of aboutParts) {
     if (part.inlineData) aboutImage = `data:image/png;base64,${part.inlineData.data}`;
   }
 
   return { mainImage, aboutImage };
+}
+
+export async function uploadToCloudinary(file: File): Promise<string> {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const response = await fetch('/api/upload', {
+    method: 'POST',
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'Upload failed');
+  }
+
+  const data = await response.json();
+  return data.secure_url;
 }
