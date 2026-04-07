@@ -24,6 +24,7 @@ import { useUser } from '@clerk/nextjs';
 import Image from 'next/image';
 import { DBService } from '@/services/dbService';
 import { AIService } from '@/services/aiService';
+import { supabase } from '@/lib/supabase';
 import { useRealtime } from '@/hooks/useRealtime';
 import ReactMarkdown from 'react-markdown';
 import { PROFESSIONS, NEIGHBORHOODS } from '@/lib/constants';
@@ -66,8 +67,15 @@ export default function ForumPage() {
         aiTags = await ai.analyzeForumPost(newPost, PROFESSIONS, NEIGHBORHOODS);
       }
 
-      // 2. Create post
-      const { data: post, error } = await DBService.createForumPost(user.id, newPost);
+      // 2. Create post with AI tags
+      const { data: post, error } = await supabase.from('forum_posts').insert({
+        user_id: user.id,
+        content: newPost,
+        profession: aiTags?.profession,
+        neighborhood: aiTags?.neighborhood,
+        is_urgent: aiTags?.urgency_level === 'high'
+      }).select().single();
+      
       if (error) throw error;
 
       // 3. Award points (Simplified for now)
@@ -204,11 +212,37 @@ export default function ForumPage() {
                           <p className="text-xs text-gray-400 font-bold">{new Date(post.created_at).toLocaleString('ar-EG')}</p>
                         </div>
                       </div>
-                      <button className="p-3 bg-gray-50 text-gray-400 rounded-2xl hover:bg-burgundy/10 hover:text-burgundy transition-all"><Plus size={20} /></button>
+                      <div className="flex gap-2">
+                        {post.is_urgent && (
+                          <span className="px-3 py-1 bg-red-50 text-red-600 rounded-full text-[10px] font-black uppercase tracking-widest border border-red-100 flex items-center gap-1 animate-pulse">
+                            <Zap size={10} /> عاجل جداً
+                          </span>
+                        )}
+                        <button className="p-3 bg-gray-50 text-gray-400 rounded-2xl hover:bg-burgundy/10 hover:text-burgundy transition-all"><Plus size={20} /></button>
+                      </div>
                     </div>
 
-                    <div className="p-6 bg-gray-50 rounded-3xl font-medium text-gray-800 leading-relaxed text-lg">
-                      {post.content}
+                    <div className="space-y-4">
+                      <div className="p-8 bg-gray-50 rounded-[40px] font-medium text-gray-800 leading-relaxed text-xl border border-gray-100/50 shadow-inner">
+                        {post.content}
+                      </div>
+                      
+                      {/* Smart Tags */}
+                      <div className="flex flex-wrap gap-2">
+                        {post.profession && (
+                          <span className="px-4 py-1.5 bg-burgundy/5 text-burgundy rounded-xl text-xs font-black border border-burgundy/10 flex items-center gap-2">
+                            <Briefcase size={12} /> {post.profession}
+                          </span>
+                        )}
+                        {post.neighborhood && (
+                          <span className="px-4 py-1.5 bg-blue-50 text-blue-600 rounded-xl text-xs font-black border border-blue-100 flex items-center gap-2">
+                            <MapPin size={12} /> {post.neighborhood}
+                          </span>
+                        )}
+                        <span className="px-4 py-1.5 bg-emerald-50 text-emerald-600 rounded-xl text-xs font-black border border-emerald-100 flex items-center gap-2">
+                          <Activity size={12} /> نشط الآن
+                        </span>
+                      </div>
                     </div>
 
                     <div className="flex items-center gap-6 pt-4 border-t border-gray-50">

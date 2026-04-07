@@ -48,6 +48,28 @@ export default function AdminDashboard() {
     fetchData();
   }, []);
 
+  const [deepInsights, setDeepInsights] = useState<string>('');
+  const [isGeneratingDeep, setIsGeneratingDeep] = useState(false);
+
+  const generateDeepInsights = async () => {
+    if (!data) return;
+    setIsGeneratingDeep(true);
+    try {
+      const response = await fetch('/api/v1/analytics/deep-insights', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data.stats),
+      });
+      const result = await response.json();
+      if (result.error) throw new Error(result.error);
+      setDeepInsights(result.insights);
+    } catch (e: any) {
+      setDeepInsights('فشل إنشاء التقارير العميقة: ' + e.message);
+    } finally {
+      setIsGeneratingDeep(false);
+    }
+  };
+
   const generateSmartReport = async () => {
     if (!data || !userApiKey) return;
     setIsGeneratingReport(true);
@@ -261,30 +283,54 @@ export default function AdminDashboard() {
                     استخدم قوة الذكاء الاصطناعي لتحليل بيانات منصتك والحصول على رؤى استراتيجية فورية تساعدك في اتخاذ القرارات.
                   </p>
                 </div>
-                <button 
-                  onClick={generateSmartReport}
-                  disabled={isGeneratingReport || !userApiKey}
-                  className="bg-white text-burgundy px-12 py-6 rounded-3xl font-black text-xl shadow-2xl hover:scale-105 transition-all flex items-center gap-4 disabled:opacity-50"
-                >
-                  {isGeneratingReport ? (
-                    <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1 }} className="w-6 h-6 border-2 border-burgundy border-t-transparent rounded-full" />
-                  ) : (
-                    <><FileText size={24} /> إنشاء تقرير ذكي الآن</>
-                  )}
-                </button>
+                <div className="flex flex-wrap gap-4">
+                  <button 
+                    onClick={generateSmartReport}
+                    disabled={isGeneratingReport || !userApiKey}
+                    className="bg-white text-burgundy px-10 py-5 rounded-3xl font-black text-lg shadow-2xl hover:scale-105 transition-all flex items-center gap-3 disabled:opacity-50"
+                  >
+                    {isGeneratingReport ? (
+                      <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1 }} className="w-6 h-6 border-2 border-burgundy border-t-transparent rounded-full" />
+                    ) : (
+                      <><Sparkles size={20} /> تقرير Gemini الذكي</>
+                    )}
+                  </button>
+                  <button 
+                    onClick={generateDeepInsights}
+                    disabled={isGeneratingDeep}
+                    className="bg-black text-white px-10 py-5 rounded-3xl font-black text-lg shadow-2xl hover:scale-105 transition-all flex items-center gap-3 disabled:opacity-50"
+                  >
+                    {isGeneratingDeep ? (
+                      <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1 }} className="w-6 h-6 border-2 border-white border-t-transparent rounded-full" />
+                    ) : (
+                      <><Zap size={20} /> رؤى DeepSeek العميقة</>
+                    )}
+                  </button>
+                </div>
               </div>
 
               <div className="bg-white/5 backdrop-blur-xl rounded-[40px] p-10 border border-white/10 min-h-[400px] flex flex-col">
-                {smartReport ? (
-                  <div className="prose prose-invert max-w-none">
-                    <ReactMarkdown>{smartReport}</ReactMarkdown>
+                {(smartReport || deepInsights) ? (
+                  <div className="prose prose-invert max-w-none space-y-8">
+                    {smartReport && (
+                      <div className="p-6 bg-white/5 rounded-2xl border border-white/10">
+                        <h4 className="text-burgundy-light font-black mb-4 flex items-center gap-2"><Sparkles size={18} /> تقرير Gemini:</h4>
+                        <ReactMarkdown>{smartReport}</ReactMarkdown>
+                      </div>
+                    )}
+                    {deepInsights && (
+                      <div className="p-6 bg-burgundy-dark/30 rounded-2xl border border-white/10">
+                        <h4 className="text-blue-300 font-black mb-4 flex items-center gap-2"><Zap size={18} /> رؤى DeepSeek:</h4>
+                        <ReactMarkdown>{deepInsights}</ReactMarkdown>
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div className="flex-1 flex flex-col items-center justify-center text-center space-y-6 opacity-40">
                     <div className="w-24 h-24 bg-white/10 rounded-full flex items-center justify-center">
                       <Sparkles size={48} />
                     </div>
-                    <p className="text-xl font-bold">اضغط على الزر لإنشاء تقرير تحليلي شامل للمنصة</p>
+                    <p className="text-xl font-bold">اضغط على الأزرار لإنشاء تقارير تحليلي شاملة للمنصة</p>
                   </div>
                 )}
               </div>
