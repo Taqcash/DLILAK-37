@@ -11,7 +11,17 @@ export default function AboutPage() {
   const [aboutImage, setAboutImage] = useState<string | null>(null);
 
   useEffect(() => {
-    generatePortSudanImages().then(res => setAboutImage(res.aboutImage));
+    const cachedImage = localStorage.getItem('about_ai_image');
+    if (cachedImage) {
+      setAboutImage(cachedImage);
+    } else {
+      generatePortSudanImages().then(res => {
+        if (res.aboutImage) {
+          setAboutImage(res.aboutImage);
+          localStorage.setItem('about_ai_image', res.aboutImage);
+        }
+      });
+    }
   }, []);
 
   return (

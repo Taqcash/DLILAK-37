@@ -1,8 +1,58 @@
+'use client';
+
+import React, { useState, useEffect, useCallback } from 'react';
 import { SignedIn, SignedOut, UserButton } from "@clerk/nextjs";
 import Link from "next/link";
-import { Search, Sparkles, MapPin, Briefcase } from "lucide-react";
+import { Search, Sparkles, MapPin, Briefcase, Zap, Star, ArrowRight } from "lucide-react";
+import { motion, AnimatePresence } from 'motion/react';
+import Image from 'next/image';
+import { DBService } from '@/services/dbService';
+import { AIService } from '@/services/aiService';
+import { PROFESSIONS, NEIGHBORHOODS } from '@/lib/constants';
+import { Ad } from '@/types';
 
 export default function LandingPage() {
+  const [query, setQuery] = useState('');
+  const [ads, setAds] = useState<Ad[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [isSearching, setIsSearching] = useState(false);
+  const [filters, setFilters] = useState<any>({
+    profession: 'الكل',
+    neighborhood: 'الكل',
+    type: 'offer'
+  });
+  const [userApiKey, setUserApiKey] = useState(typeof window !== 'undefined' ? localStorage.getItem('gemini_api_key') : null);
+
+  const fetchAds = useCallback(async () => {
+    setLoading(true);
+    const { data } = await DBService.fetchAds({ 
+      ...filters, 
+      status: 'active',
+      limit: 6 
+    });
+    if (data) setAds(data);
+    setLoading(false);
+  }, [filters]);
+
+  useEffect(() => {
+    fetchAds();
+  }, [fetchAds]);
+
+  const handleSmartSearch = async () => {
+    if (!query.trim() || !userApiKey) return;
+    setIsSearching(true);
+    try {
+      const ai = new AIService(userApiKey);
+      const smartFilters = await ai.smartSearch(query, PROFESSIONS, NEIGHBORHOODS);
+      setFilters(smartFilters);
+      alert(`تم تطبيق الفلاتر الذكية: ${smartFilters.profession} في ${smartFilters.neighborhood}`);
+    } catch (e) {
+      console.error("Smart search failed:", e);
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
   return (
     <div className="min-h-screen flex flex-col">
       <nav className="border-b border-gray-100 px-6 py-4 flex justify-between items-center sticky top-0 bg-white/80 backdrop-blur-md z-50">
@@ -12,73 +62,176 @@ export default function LandingPage() {
         </div>
         
         <div className="flex items-center gap-4">
+          <div className="hidden md:flex items-center gap-6 mr-8">
+            <Link href="/forum" className="text-sm font-bold text-gray-500 hover:text-burgundy transition-colors">المنتدى</Link>
+            <Link href="/about" className="text-sm font-bold text-gray-500 hover:text-burgundy transition-colors">عن بورتسودان</Link>
+          </div>
           <SignedIn>
+            <Link href="/profile" className="text-sm font-bold text-gray-500 hover:text-burgundy transition-colors">ملفي الشخصي</Link>
             <UserButton afterSignOutUrl="/" />
           </SignedIn>
           <SignedOut>
-            <Link href="/sign-in" className="text-sm font-bold text-gray-custom hover:text-burgundy">دخول</Link>
-            <Link href="/sign-up" className="btn-burgundy text-sm">ابدأ الآن</Link>
+            <Link href="/sign-in" className="text-sm font-bold text-gray-500 hover:text-burgundy transition-colors">دخول</Link>
+            <Link href="/sign-up" className="bg-burgundy text-white px-6 py-2 rounded-xl font-black text-sm shadow-lg hover:bg-burgundy/90 transition-all">ابدأ الآن</Link>
           </SignedOut>
         </div>
       </nav>
 
       <main className="flex-1">
-        <section className="py-20 px-6 text-center space-y-8 bg-gradient-to-b from-burgundy/5 to-white">
-          <div className="max-w-4xl mx-auto space-y-6">
-            <h2 className="text-5xl md:text-7xl font-black text-gray-900 leading-tight">
-              خدمات <span className="text-burgundy">بورتسودان</span> <br /> في متناول يدك
-            </h2>
-            <p className="text-xl text-gray-custom font-medium max-w-2xl mx-auto">
-              المنصة الموحدة لربط المهنيين، الأسر المنتجة، وطالبي الخدمات في ثغر السودان الباسم.
-            </p>
+        <section className="py-24 px-6 text-center space-y-12 bg-gradient-to-b from-burgundy/5 to-white relative overflow-hidden">
+          <div className="absolute top-0 left-0 w-64 h-64 bg-burgundy/5 rounded-full -translate-x-1/2 -translate-y-1/2 blur-3xl" />
+          <div className="absolute bottom-0 right-0 w-96 h-96 bg-burgundy/5 rounded-full translate-x-1/3 translate-y-1/3 blur-3xl" />
+          
+          <div className="max-w-4xl mx-auto space-y-6 relative z-10">
+            <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ duration: 0.8 }}>
+              <span className="px-4 py-2 bg-burgundy/10 text-burgundy rounded-full text-xs font-black uppercase tracking-widest border border-burgundy/10 mb-6 inline-block">
+                ثغر السودان الباسم 🇸🇩
+              </span>
+              <h2 className="text-6xl md:text-8xl font-black text-gray-900 leading-tight tracking-tighter">
+                خدمات <span className="text-burgundy">بورتسودان</span> <br /> في متناول يدك
+              </h2>
+              <p className="text-xl text-gray-500 font-medium max-w-2xl mx-auto leading-relaxed mt-6">
+                المنصة الموحدة لربط المهنيين، الأسر المنتجة، وطالبي الخدمات في قلب البحر الأحمر.
+              </p>
+            </motion.div>
           </div>
 
-          <div className="max-w-3xl mx-auto bg-white p-2 rounded-2xl shadow-2xl border border-gray-100 flex flex-col md:flex-row gap-2">
+          <motion.div 
+            initial={{ y: 30, opacity: 0 }} 
+            animate={{ y: 0, opacity: 1 }} 
+            transition={{ delay: 0.4, duration: 0.8 }}
+            className="max-w-3xl mx-auto bg-white p-3 rounded-[32px] shadow-2xl border border-gray-100 flex flex-col md:flex-row gap-3 relative z-10"
+          >
             <div className="flex-1 relative">
-              <Search className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+              <Search className="absolute right-6 top-1/2 -translate-y-1/2 text-gray-400" size={24} />
               <input 
                 type="text" 
+                value={query}
+                onChange={e => setQuery(e.target.value)}
                 placeholder="ابحث بذكاء.. (مثلاً: سباك في حي المطار)" 
-                className="w-full pr-12 pl-4 py-4 rounded-xl bg-gray-50 border-none focus:ring-2 focus:ring-burgundy outline-none font-bold"
+                className="w-full pr-16 pl-6 py-5 rounded-2xl bg-gray-50 border-none focus:ring-2 focus:ring-burgundy outline-none font-bold text-lg"
               />
             </div>
-            <button className="bg-burgundy text-white px-8 py-4 rounded-xl font-black flex items-center justify-center gap-2 hover:opacity-90 transition-all">
-              <Sparkles size={20} />
-              بحث ذكي
+            <button 
+              onClick={handleSmartSearch}
+              disabled={isSearching || !query.trim() || !userApiKey}
+              className="bg-burgundy text-white px-10 py-5 rounded-2xl font-black text-lg flex items-center justify-center gap-3 hover:bg-burgundy/90 transition-all shadow-xl disabled:opacity-50"
+            >
+              {isSearching ? <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1 }} className="w-6 h-6 border-2 border-white border-t-transparent rounded-full" /> : <><Sparkles size={24} /> بحث ذكي</>}
             </button>
-          </div>
+          </motion.div>
         </section>
 
-        <section className="max-w-7xl mx-auto px-6 py-20 grid grid-cols-1 md:grid-cols-3 gap-8">
-          <div className="p-8 bg-white rounded-3xl border border-gray-100 shadow-xl hover:border-burgundy transition-all group">
-            <div className="w-14 h-14 bg-burgundy/10 text-burgundy rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
-              <Briefcase size={28} />
+        {/* Featured Ads Section */}
+        <section className="max-w-7xl mx-auto px-6 py-24 space-y-12">
+          <div className="flex justify-between items-end">
+            <div className="space-y-2">
+              <h2 className="text-4xl font-black tracking-tighter">أحدث <span className="text-burgundy">الخدمات</span></h2>
+              <p className="text-gray-500 font-medium">اكتشف أفضل العروض والطلبات في مدينتك</p>
             </div>
-            <h3 className="text-2xl font-black mb-4">مهنيين موثقين</h3>
-            <p className="text-gray-custom font-medium">نخبة من أفضل الصناع والمهنيين في بورتسودان، تم التحقق من هويتهم وكفاءتهم.</p>
-          </div>
-          
-          <div className="p-8 bg-white rounded-3xl border border-gray-100 shadow-xl hover:border-burgundy transition-all group">
-            <div className="w-14 h-14 bg-burgundy/10 text-burgundy rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
-              <MapPin size={28} />
-            </div>
-            <h3 className="text-2xl font-black mb-4">تغطية شاملة</h3>
-            <p className="text-gray-custom font-medium">نغطي كافة أحياء المدينة، من حي المطار إلى وسط المدينة، لضمان سرعة الوصول.</p>
+            <Link href="/forum" className="text-burgundy font-black flex items-center gap-2 hover:underline">
+              عرض الكل <ArrowRight size={20} />
+            </Link>
           </div>
 
-          <div className="p-8 bg-white rounded-3xl border border-gray-100 shadow-xl hover:border-burgundy transition-all group">
-            <div className="w-14 h-14 bg-burgundy/10 text-burgundy rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
-              <Sparkles size={28} />
+          {loading ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+              {[1, 2, 3, 4, 5, 6].map(i => (
+                <div key={i} className="h-96 bg-gray-50 rounded-[40px] animate-pulse border border-gray-100" />
+              ))}
             </div>
-            <h3 className="text-2xl font-black mb-4">ذكاء اصطناعي</h3>
-            <p className="text-gray-custom font-medium">نستخدم تقنيات Gemini لتحليل طلباتك وتقديم أفضل التوصيات بدقة متناهية.</p>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+              <AnimatePresence mode="popLayout">
+                {ads.map((ad) => (
+                  <motion.div 
+                    key={ad.id}
+                    layout
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    className="bg-white rounded-[40px] overflow-hidden shadow-xl border border-gray-100 group hover:shadow-2xl transition-all"
+                  >
+                    <Link href={`/services/${ad.id}`}>
+                      <div className="h-64 relative overflow-hidden">
+                        <Image src={ad.image_url || "https://picsum.photos/seed/service/600/400"} className="object-cover group-hover:scale-110 transition-transform duration-700" alt={ad.title} fill />
+                        <div className="absolute top-6 right-6 z-10 flex gap-2">
+                          {ad.is_premium && (
+                            <span className="bg-amber-500 text-white px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest shadow-lg flex items-center gap-1">
+                              <Star size={12} fill="currentColor" /> مميز
+                            </span>
+                          )}
+                          <span className="bg-white/90 backdrop-blur-md text-gray-900 px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest shadow-lg">
+                            {ad.profession}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="p-8 space-y-6">
+                        <div className="space-y-2">
+                          <h3 className="text-2xl font-black group-hover:text-burgundy transition-colors line-clamp-1">{ad.title}</h3>
+                          <p className="text-gray-500 font-medium text-sm line-clamp-2 leading-relaxed">{ad.description}</p>
+                        </div>
+                        <div className="flex items-center justify-between pt-6 border-t border-gray-50">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 relative rounded-xl overflow-hidden border border-gray-100">
+                              <Image src={ad.profiles?.avatar_url || "https://picsum.photos/seed/user/100/100"} className="object-cover" alt={ad.profiles?.fullName || 'User'} fill />
+                            </div>
+                            <div>
+                              <p className="text-xs font-black">{ad.profiles?.fullName}</p>
+                              <p className="text-[10px] text-gray-400 font-bold flex items-center gap-1"><MapPin size={10} /> {ad.neighborhood}</p>
+                            </div>
+                          </div>
+                          <p className="text-xl font-black text-burgundy">{ad.price} <span className="text-[10px] text-gray-400">ج.س</span></p>
+                        </div>
+                      </div>
+                    </Link>
+                  </motion.div>
+                ))}
+              </AnimatePresence>
+            </div>
+          )}
+        </section>
+
+        {/* Features Section */}
+        <section className="bg-gray-50 py-24">
+          <div className="max-w-7xl mx-auto px-6 grid grid-cols-1 md:grid-cols-3 gap-12">
+            <div className="p-10 bg-white rounded-[40px] shadow-xl border border-gray-100 hover:border-burgundy transition-all group">
+              <div className="w-16 h-16 bg-burgundy/10 text-burgundy rounded-2xl flex items-center justify-center mb-8 group-hover:scale-110 transition-transform">
+                <Briefcase size={32} />
+              </div>
+              <h3 className="text-2xl font-black mb-4">مهنيين موثقين</h3>
+              <p className="text-gray-500 font-medium leading-relaxed">نخبة من أفضل الصناع والمهنيين في بورتسودان، تم التحقق من هويتهم وكفاءتهم ميدانياً.</p>
+            </div>
+            
+            <div className="p-10 bg-white rounded-[40px] shadow-xl border border-gray-100 hover:border-burgundy transition-all group">
+              <div className="w-16 h-16 bg-burgundy/10 text-burgundy rounded-2xl flex items-center justify-center mb-8 group-hover:scale-110 transition-transform">
+                <MapPin size={32} />
+              </div>
+              <h3 className="text-2xl font-black mb-4">تغطية شاملة</h3>
+              <p className="text-gray-500 font-medium leading-relaxed">نغطي كافة أحياء المدينة، من حي المطار إلى وسط المدينة، لضمان سرعة الوصول وجودة الخدمة.</p>
+            </div>
+
+            <div className="p-10 bg-white rounded-[40px] shadow-xl border border-gray-100 hover:border-burgundy transition-all group">
+              <div className="w-16 h-16 bg-burgundy/10 text-burgundy rounded-2xl flex items-center justify-center mb-8 group-hover:scale-110 transition-transform">
+                <Sparkles size={32} />
+              </div>
+              <h3 className="text-2xl font-black mb-4">ذكاء اصطناعي</h3>
+              <p className="text-gray-500 font-medium leading-relaxed">نستخدم تقنيات Gemini لتحليل طلباتك وتقديم أفضل التوصيات بدقة متناهية لتوفير وقتك وجهدك.</p>
+            </div>
           </div>
         </section>
       </main>
 
-      <footer className="bg-gray-900 text-white py-12 px-6 text-center">
-        <p className="font-black text-xl mb-4">دليل خدمتك</p>
-        <p className="text-gray-400 text-sm">© ٢٠٢٦ ثغر السودان الباسم. جميع الحقوق محفوظة.</p>
+      <footer className="bg-gray-900 text-white py-16 px-6 text-center space-y-8">
+        <div className="flex items-center justify-center gap-3">
+          <div className="w-12 h-12 bg-burgundy rounded-2xl flex items-center justify-center text-white font-black text-2xl shadow-xl">د</div>
+          <h2 className="text-3xl font-black tracking-tighter">دليل خدمتك</h2>
+        </div>
+        <div className="flex justify-center gap-8">
+          <Link href="/forum" className="text-gray-400 hover:text-white transition-colors font-bold">المنتدى</Link>
+          <Link href="/about" className="text-gray-400 hover:text-white transition-colors font-bold">عن بورتسودان</Link>
+          <Link href="/profile" className="text-gray-400 hover:text-white transition-colors font-bold">الملف الشخصي</Link>
+        </div>
+        <p className="text-gray-500 text-sm font-bold">© ٢٠٢٦ ثغر السودان الباسم. جميع الحقوق محفوظة.</p>
       </footer>
     </div>
   );

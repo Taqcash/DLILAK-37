@@ -21,7 +21,9 @@ import { useUser, useClerk, SignedIn, SignedOut, UserButton } from '@clerk/nextj
 import Image from 'next/image';
 import { Logo } from './Logo';
 
-export const NavigationHeader = ({ userProfile, notifications, onShowNotifications }: any) => {
+import { Profile, Notification } from '../types';
+
+export const NavigationHeader = ({ userProfile, notifications, onShowNotifications }: { userProfile: Profile | null, notifications: Notification[], onShowNotifications: () => void }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const pathname = usePathname();
   const { signOut } = useClerk();
@@ -116,7 +118,7 @@ export const NavigationHeader = ({ userProfile, notifications, onShowNotificatio
   );
 };
 
-export const NotificationsModal = ({ notifications, onClose }: any) => (
+export const NotificationsModal = ({ notifications, onClose }: { notifications: Notification[], onClose: () => void }) => (
   <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
     <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} className="bg-white rounded-[40px] w-full max-w-md p-8 shadow-2xl">
       <div className="flex justify-between items-center mb-8">

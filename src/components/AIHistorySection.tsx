@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { History } from 'lucide-react';
+import { useUser } from '@clerk/nextjs';
 import { supabase } from '../lib/supabase';
 
 interface AIHistoryItem {
@@ -12,12 +13,12 @@ interface AIHistoryItem {
 }
 
 export const AIHistorySection = ({ userApiKey }: { userApiKey: string }) => {
+  const { user } = useUser();
   const [history, setHistory] = useState<AIHistoryItem[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchHistory = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
       
       const { data } = await supabase
@@ -31,7 +32,7 @@ export const AIHistorySection = ({ userApiKey }: { userApiKey: string }) => {
       setLoading(false);
     };
     fetchHistory();
-  }, []);
+  }, [user]);
 
   if (!userApiKey) return null;
 

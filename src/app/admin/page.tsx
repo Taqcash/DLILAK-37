@@ -21,7 +21,12 @@ import {
   Settings,
   Bell,
   Search,
-  Sparkles
+  Sparkles,
+  MapPin,
+  CheckCircle,
+  XCircle,
+  Eye,
+  Phone
 } from 'lucide-react';
 import { DBService } from '@/services/dbService';
 import { AIService } from '@/services/aiService';
@@ -35,18 +40,47 @@ export default function AdminDashboard() {
   const { user, isLoaded } = useUser();
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<'analytics' | 'verifications' | 'visits'>('analytics');
+  const [verifications, setVerifications] = useState<any[]>([]);
+  const [visitRequests, setVisitRequests] = useState<any[]>([]);
   const [smartReport, setSmartReport] = useState<string>('');
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
   const [userApiKey] = useState(typeof window !== 'undefined' ? localStorage.getItem('gemini_api_key') : null);
 
   useEffect(() => {
     const fetchData = async () => {
-      const analytics = await DBService.getAnalyticsData();
+      const [analytics, verifs, visits] = await Promise.all([
+        DBService.getAnalyticsData(),
+        DBService.fetchVerificationRequests(),
+        DBService.fetchFieldVisitRequests()
+      ]);
       setData(analytics);
+      setVerifications(verifs.data || []);
+      setVisitRequests(visits.data || []);
       setLoading(false);
     };
     fetchData();
   }, []);
+
+  const handleApproveVerification = async (userId: string) => {
+    try {
+      await DBService.approveVerification(userId);
+      setVerifications(prev => prev.filter(v => v.id !== userId));
+      alert('تم توثيق الحساب بنجاح');
+    } catch (e) {
+      alert('فشل التوثيق');
+    }
+  };
+
+  const handleUpdateVisitStatus = async (requestId: string, userId: string, status: 'approved' | 'rejected') => {
+    try {
+      await DBService.updateFieldVisitStatus(requestId, userId, status);
+      setVisitRequests(prev => prev.map(r => r.id === requestId ? { ...r, status } : r));
+      alert(status === 'approved' ? 'تمت الموافقة على الزيارة' : 'تم رفض الزيارة');
+    } catch (e) {
+      alert('فشل تحديث الحالة');
+    }
+  };
 
   const [deepInsights, setDeepInsights] = useState<string>('');
   const [isGeneratingDeep, setIsGeneratingDeep] = useState(false);
@@ -154,8 +188,34 @@ export default function AdminDashboard() {
           </div>
         </header>
 
-        {/* Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        {/* Tabs */}
+        <div className="flex gap-4 border-b border-gray-200 pb-4">
+          {[
+            { id: 'analytics', label: 'التحليلات', icon: <Activity size={20} /> },
+            { id: 'verifications', label: 'توثيق الهوية', icon: <ShieldCheck size={20} />, count: verifications.length },
+            { id: 'visits', label: 'الزيارات الميدانية', icon: <MapPin size={20} />, count: visitRequests.filter(r => r.status === 'pending').length }
+          ].map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id as any)}
+              className={`flex items-center gap-2 px-6 py-3 rounded-2xl font-black transition-all ${
+                activeTab === tab.id 
+                  ? 'bg-burgundy text-white shadow-lg' 
+                  : 'bg-white text-gray-500 hover:bg-gray-50'
+              }`}
+            >
+              {tab.icon} {tab.label}
+              {tab.count !== undefined && tab.count > 0 && (
+                <span className="bg-white text-burgundy px-2 py-0.5 rounded-full text-[10px]">{tab.count}</span>
+              )}
+            </button>
+          ))}
+        </div>
+
+        {activeTab === 'analytics' && (
+          <>
+            {/* Stats Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {[
             { label: 'إجمالي المستخدمين', value: data.stats.users, icon: <Users />, color: 'bg-blue-50 text-blue-600', trend: '+12%' },
             { label: 'الإعلانات النشطة', value: data.stats.ads, icon: <Briefcase />, color: 'bg-burgundy/5 text-burgundy', trend: '+5%' },
@@ -337,7 +397,99 @@ export default function AdminDashboard() {
             </div>
           </div>
 
-        </div>
+            </div>
+          </>
+        )}
+
+        {activeTab === 'verifications' && (
+          <div className="bg-white rounded-[50px] shadow-2xl border border-gray-100 overflow-hidden">
+            <div className="p-10 border-b border-gray-50 flex justify-between items-center">
+              <h3 className="text-2xl font-black">طلبات توثيق الهوية</h3>
+              <span className="bg-burgundy/10 text-burgundy px-4 py-2 rounded-full text-xs font-black">{verifications.length} طلب معلق</span>
+            </div>
+            <div className="divide-y divide-gray-50">
+              {verifications.length > 0 ? verifications.map((v) => (
+                <div key={v.id} className="p-8 flex items-center justify-between hover:bg-gray-50 transition-all">
+                  <div className="flex items-center gap-6">
+                    <div className="w-16 h-16 relative rounded-2xl overflow-hidden border border-gray-100">
+                      <Image src={v.avatar_url || "https://picsum.photos/seed/user/100/100"} className="object-cover" alt={v.fullName} fill />
+                    </div>
+                    <div>
+                      <h4 className="text-lg font-black">{v.fullName}</h4>
+                      <p className="text-sm text-gray-400 font-bold">{v.email}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <a href={v.verification_image} target="_blank" rel="noreferrer" className="flex items-center gap-2 px-6 py-3 bg-gray-100 text-gray-600 rounded-2xl font-bold hover:bg-gray-200 transition-all">
+                      <Eye size={18} /> عرض المستند
+                    </a>
+                    <button 
+                      onClick={() => handleApproveVerification(v.id)}
+                      className="flex items-center gap-2 px-6 py-3 bg-burgundy text-white rounded-2xl font-black shadow-lg hover:bg-burgundy/90 transition-all"
+                    >
+                      <CheckCircle size={18} /> اعتماد التوثيق
+                    </button>
+                  </div>
+                </div>
+              )) : (
+                <div className="p-20 text-center text-gray-400 font-bold">لا توجد طلبات توثيق معلقة.</div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'visits' && (
+          <div className="bg-white rounded-[50px] shadow-2xl border border-gray-100 overflow-hidden">
+            <div className="p-10 border-b border-gray-50 flex justify-between items-center">
+              <h3 className="text-2xl font-black">طلبات الزيارات الميدانية</h3>
+              <span className="bg-burgundy/10 text-burgundy px-4 py-2 rounded-full text-xs font-black">{visitRequests.filter(r => r.status === 'pending').length} طلب جديد</span>
+            </div>
+            <div className="divide-y divide-gray-50">
+              {visitRequests.length > 0 ? visitRequests.map((r) => (
+                <div key={r.id} className="p-8 flex items-center justify-between hover:bg-gray-50 transition-all">
+                  <div className="flex items-center gap-6">
+                    <div className="w-16 h-16 relative rounded-2xl overflow-hidden border border-gray-100">
+                      <Image src={r.profiles?.avatar_url || "https://picsum.photos/seed/user/100/100"} className="object-cover" alt={r.profiles?.fullName} fill />
+                    </div>
+                    <div>
+                      <h4 className="text-lg font-black">{r.profiles?.fullName}</h4>
+                      <div className="flex items-center gap-3 mt-1">
+                        <p className="text-xs text-gray-400 font-bold flex items-center gap-1"><MapPin size={12} /> {r.profiles?.neighborhood}</p>
+                        <p className="text-xs text-gray-400 font-bold flex items-center gap-1"><Phone size={12} /> {r.profiles?.phone}</p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    {r.status === 'pending' ? (
+                      <>
+                        <button 
+                          onClick={() => handleUpdateVisitStatus(r.id, r.user_id, 'approved')}
+                          className="flex items-center gap-2 px-6 py-3 bg-emerald-500 text-white rounded-2xl font-black shadow-lg hover:bg-emerald-600 transition-all"
+                        >
+                          <CheckCircle size={18} /> تم التحقق
+                        </button>
+                        <button 
+                          onClick={() => handleUpdateVisitStatus(r.id, r.user_id, 'rejected')}
+                          className="flex items-center gap-2 px-6 py-3 bg-red-500 text-white rounded-2xl font-black shadow-lg hover:bg-red-600 transition-all"
+                        >
+                          <XCircle size={18} /> رفض الطلب
+                        </button>
+                      </>
+                    ) : (
+                      <span className={`px-6 py-3 rounded-2xl font-black text-sm ${
+                        r.status === 'approved' ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600'
+                      }`}>
+                        {r.status === 'approved' ? 'تمت الموافقة' : 'تم الرفض'}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )) : (
+                <div className="p-20 text-center text-gray-400 font-bold">لا توجد طلبات زيارة ميدانية.</div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

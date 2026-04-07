@@ -29,6 +29,7 @@ import { useUser } from '@clerk/nextjs';
 import Image from 'next/image';
 import { DBService } from '@/services/dbService';
 import { AIService } from '@/services/aiService';
+import { ContactAdminModal } from '@/components/Modals';
 import ReactMarkdown from 'react-markdown';
 
 export default function ServiceDetailPage() {
@@ -40,6 +41,7 @@ export default function ServiceDetailPage() {
   const [ratings, setRatings] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showRatingModal, setShowRatingModal] = useState(false);
+  const [showContactModal, setShowContactModal] = useState(false);
   const [rating, setRating] = useState(5);
   const [comment, setComment] = useState('');
   const [isSubmittingRating, setIsSubmittingRating] = useState(false);
@@ -293,7 +295,10 @@ export default function ServiceDetailPage() {
               >
                 <Phone size={24} /> اتصل الآن
               </a>
-              <button className="w-full bg-gray-900 text-white py-5 rounded-2xl font-black text-lg shadow-2xl hover:bg-black transition-all flex items-center justify-center gap-4">
+              <button 
+                onClick={() => router.push(`/chat/${ad.user_id}`)}
+                className="w-full bg-gray-900 text-white py-5 rounded-2xl font-black text-lg shadow-2xl hover:bg-black transition-all flex items-center justify-center gap-4"
+              >
                 <MessageSquare size={24} /> مراسلة فورية
               </button>
             </div>
@@ -308,7 +313,7 @@ export default function ServiceDetailPage() {
         </div>
       </div>
 
-      {/* Rating Modal */}
+      {/* Modals */}
       <AnimatePresence>
         {showRatingModal && (
           <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md">
@@ -353,6 +358,7 @@ export default function ServiceDetailPage() {
             </motion.div>
           </div>
         )}
+        {showContactModal && <ContactAdminModal onClose={() => setShowContactModal(false)} />}
       </AnimatePresence>
     </div>
   );

@@ -29,6 +29,7 @@ import { useUser, useClerk } from '@clerk/nextjs';
 import Image from 'next/image';
 import { DBService } from '@/services/dbService';
 import { AIService } from '@/services/aiService';
+import { EditAdModal } from '@/components/Modals';
 import { supabase } from '@/lib/supabase';
 import ReactMarkdown from 'react-markdown';
 
@@ -39,6 +40,7 @@ export default function ProfilePage() {
   const [userProfile, setUserProfile] = useState<any>(null);
   const [activeTab, setActiveTab] = useState('ads');
   const [userAds, setUserAds] = useState<any[]>([]);
+  const [editingAd, setEditingAd] = useState<any>(null);
   const [aiLogs, setAiLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isVerifying, setIsVerifying] = useState(false);
@@ -113,6 +115,45 @@ export default function ProfilePage() {
       alert('فشل توليد التقرير.');
     } finally {
       setIsGeneratingReport(false);
+    }
+  };
+
+  const handleRequestFieldVisit = async () => {
+    if (!user) return;
+    try {
+      const { error } = await DBService.requestFieldVisit(user.id);
+      if (error) throw error;
+      alert('تم إرسال طلب الزيارة الميدانية بنجاح.');
+    } catch (e: any) {
+      alert('فشل إرسال الطلب: ' + e.message);
+    }
+  };
+
+  const [settings, setSettings] = useState({
+    full_name: '',
+    phone: '',
+    bio: ''
+  });
+
+  useEffect(() => {
+    if (userProfile) {
+      setSettings({
+        full_name: userProfile.full_name || '',
+        phone: userProfile.phone || '',
+        bio: userProfile.bio || ''
+      });
+    }
+  }, [userProfile]);
+
+  const handleSaveSettings = async () => {
+    if (!user) return;
+    try {
+      const { error } = await DBService.updateProfile(user.id, settings);
+      if (error) throw error;
+      alert('تم حفظ الإعدادات بنجاح.');
+      fetchUserData();
+    } catch (e: any) {
+      alert('فشل حفظ الإعدادات: ' + e.message);
     }
   };
 
@@ -220,7 +261,12 @@ export default function ProfilePage() {
                     <Image src={ad.image_url || "https://picsum.photos/seed/ad/400/300"} className="object-cover" alt={ad.title} fill />
                     <div className="absolute top-4 right-4 z-10 flex gap-2">
                       <button onClick={() => handleDeleteAd(ad.id)} className="p-3 bg-white/90 backdrop-blur-md text-rose-600 rounded-2xl shadow-lg hover:bg-rose-600 hover:text-white transition-all"><Trash2 size={18} /></button>
-                      <button className="p-3 bg-white/90 backdrop-blur-md text-burgundy rounded-2xl shadow-lg hover:bg-burgundy hover:text-white transition-all"><Edit3 size={18} /></button>
+                      <button 
+                        onClick={() => setEditingAd(ad)}
+                        className="p-3 bg-white/90 backdrop-blur-md text-burgundy rounded-2xl shadow-lg hover:bg-burgundy hover:text-white transition-all"
+                      >
+                        <Edit3 size={18} />
+                      </button>
                     </div>
                   </div>
                   <div className="p-8 space-y-4">
@@ -276,7 +322,12 @@ export default function ProfilePage() {
                 <div className="p-8 bg-gray-50 rounded-[40px] border border-gray-100 space-y-4">
                   <h3 className="text-xl font-black flex items-center gap-3 text-emerald-600"><MapPin /> التوثيق الميداني</h3>
                   <p className="text-sm text-gray-500 leading-relaxed">زيارة مندوبنا لموقع عملك للتأكد من جودة الخدمة والموقع.</p>
-                  <button className="w-full py-4 bg-white rounded-2xl font-black text-sm shadow-sm hover:bg-emerald-600 hover:text-white transition-all">طلب زيارة ميدانية</button>
+                  <button 
+                    onClick={handleRequestFieldVisit}
+                    className="w-full py-4 bg-white rounded-2xl font-black text-sm shadow-sm hover:bg-emerald-600 hover:text-white transition-all"
+                  >
+                    طلب زيارة ميدانية
+                  </button>
                 </div>
               </div>
 
@@ -332,7 +383,8 @@ export default function ProfilePage() {
                   <label className="text-xs font-black text-gray-400 uppercase tracking-widest">الاسم الكامل</label>
                   <input 
                     type="text" 
-                    defaultValue={userProfile?.full_name || user?.fullName} 
+                    value={settings.full_name} 
+                    onChange={e => setSettings(prev => ({ ...prev, full_name: e.target.value }))}
                     className="w-full p-5 bg-gray-50 rounded-2xl border-none focus:ring-2 focus:ring-burgundy outline-none font-bold"
                   />
                 </div>
@@ -340,7 +392,8 @@ export default function ProfilePage() {
                   <label className="text-xs font-black text-gray-400 uppercase tracking-widest">رقم الهاتف</label>
                   <input 
                     type="tel" 
-                    defaultValue={userProfile?.phone} 
+                    value={settings.phone} 
+                    onChange={e => setSettings(prev => ({ ...prev, phone: e.target.value }))}
                     placeholder="+249..."
                     className="w-full p-5 bg-gray-50 rounded-2xl border-none focus:ring-2 focus:ring-burgundy outline-none font-bold"
                   />
@@ -349,12 +402,18 @@ export default function ProfilePage() {
                   <label className="text-xs font-black text-gray-400 uppercase tracking-widest">نبذة عنك</label>
                   <textarea 
                     rows={4}
-                    defaultValue={userProfile?.bio}
+                    value={settings.bio}
+                    onChange={e => setSettings(prev => ({ ...prev, bio: e.target.value }))}
                     className="w-full p-5 bg-gray-50 rounded-2xl border-none focus:ring-2 focus:ring-burgundy outline-none font-bold resize-none"
                   />
                 </div>
               </div>
-              <button className="w-full bg-gray-900 text-white py-6 rounded-3xl font-black text-xl shadow-2xl hover:bg-black transition-all">حفظ التغييرات</button>
+              <button 
+                onClick={handleSaveSettings}
+                className="w-full bg-gray-900 text-white py-6 rounded-3xl font-black text-xl shadow-2xl hover:bg-black transition-all"
+              >
+                حفظ التغييرات
+              </button>
             </div>
           )}
 
@@ -403,6 +462,20 @@ export default function ProfilePage() {
           )}
         </motion.div>
       </AnimatePresence>
+
+      {editingAd && (
+        <EditAdModal 
+          ad={editingAd} 
+          onClose={() => setEditingAd(null)} 
+          onUpdate={(updatedAd: any) => {
+            if (updatedAd) {
+              setUserAds(prev => prev.map(a => a.id === updatedAd.id ? updatedAd : a));
+            } else {
+              setUserAds(prev => prev.filter(a => a.id !== editingAd.id));
+            }
+          }} 
+        />
+      )}
     </div>
   );
 }

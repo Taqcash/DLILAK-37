@@ -78,8 +78,8 @@ export default function ForumPage() {
       
       if (error) throw error;
 
-      // 3. Award points (Simplified for now)
-      await DBService.updateProfile(user.id, { points: 10 }); // Increment logic should be on backend
+      // 3. Award points (Atomic)
+      await DBService.incrementPoints(user.id, 10);
 
       setNewPost('');
       alert('تم نشر مشاركتك بنجاح! حصلت على 10 نقاط.');
