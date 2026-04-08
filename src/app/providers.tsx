@@ -2,6 +2,7 @@
 
 import { createClient } from '@/lib/supabase/client';
 import { SupabaseClient } from '@supabase/supabase-js';
+import { ThemeProvider } from 'next-themes';
 import { createContext, useContext, useEffect, useState } from 'react';
 
 type SupabaseContext = {
@@ -10,7 +11,7 @@ type SupabaseContext = {
 
 const Context = createContext<SupabaseContext | undefined>(undefined);
 
-export default function SupabaseProvider({
+export default function Providers({
   children,
 }: {
   children: React.ReactNode;
@@ -36,7 +37,9 @@ export default function SupabaseProvider({
 
   return (
     <Context.Provider value={{ supabase }}>
-      {children}
+      <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+        {children}
+      </ThemeProvider>
     </Context.Provider>
   );
 }

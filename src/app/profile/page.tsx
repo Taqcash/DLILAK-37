@@ -141,12 +141,39 @@ export default function ProfilePage() {
     if (!user || !verificationFile) return;
     setIsVerifying(true);
     try {
+      // 1. Convert to base64 for AI analysis
+      const reader = new FileReader();
+      const base64Promise = new Promise<string>((resolve) => {
+        reader.onload = () => {
+          const base64 = (reader.result as string).split(',')[1];
+          resolve(base64);
+        };
+      });
+      reader.readAsDataURL(verificationFile);
+      const base64Image = await base64Promise;
+
+      // 2. Analyze with Gemini
+      const ai = new AIService(process.env.NEXT_PUBLIC_GEMINI_API_KEY!);
+      const analysis = await ai.analyzeID(base64Image);
+
+      if (!analysis.is_valid) {
+        alert('عذراً، لم نتمكن من التحقق من صحة الوثيقة. يرجى التأكد من وضوح الصورة.');
+        return;
+      }
+
+      // 3. Upload to Cloudinary (as requested)
       const { data, error } = await StorageService.uploadFile('verifications', verificationFile);
       if (error) throw error;
-      // Update profile with verification status or file URL
-      alert('تم رفع ملف التوثيق بنجاح، سيتم مراجعته قريباً');
+
+      // 4. Update profile
+      await ProfileService.updateProfile(user.id, { 
+        is_verified: false, // Still needs admin review but AI confirmed it's an ID
+        full_name: analysis.full_name || userProfile?.full_name 
+      });
+
+      alert(`تم تحليل الوثيقة بنجاح: ${analysis.full_name}. سيتم مراجعتها من قبل الإدارة قريباً.`);
     } catch (e: any) {
-      alert('خطأ في رفع الملف: ' + e.message);
+      alert('خطأ في معالجة الوثيقة: ' + e.message);
     } finally {
       setIsVerifying(false);
     }

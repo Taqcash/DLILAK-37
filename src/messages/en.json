@@ -1,0 +1,18 @@
+{
+  "common": {
+    "title": "Dlilak Service Guide",
+    "search": "Search",
+    "login": "Login",
+    "signup": "Sign Up",
+    "logout": "Logout",
+    "profile": "Profile",
+    "home": "Home",
+    "forum": "Forum",
+    "about": "About Port Sudan"
+  },
+  "home": {
+    "hero_title": "Port Sudan Services at Your Fingertips",
+    "hero_subtitle": "The unified platform connecting professionals and productive families in the heart of the Red Sea",
+    "smart_search": "Smart Search"
+  }
+}

@@ -16,7 +16,7 @@ DROP TABLE IF EXISTS professions CASCADE;
 -- 2. Create Profiles Table
 CREATE TABLE profiles (
   id UUID REFERENCES auth.users ON DELETE CASCADE PRIMARY KEY,
-  fullName TEXT,
+  full_name TEXT,
   avatar_url TEXT,
   points INTEGER DEFAULT 150,
   role TEXT DEFAULT 'user',
@@ -130,10 +130,10 @@ CREATE POLICY "Professions are viewable by everyone" ON professions FOR SELECT U
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
-  INSERT INTO public.profiles (id, fullName, avatar_url, points, role)
+  INSERT INTO public.profiles (id, full_name, avatar_url, points, role)
   VALUES (
     NEW.id,
-    COALESCE(NEW.raw_user_meta_data->>'fullName', 'مستخدم جديد'),
+    COALESCE(NEW.raw_user_meta_data->>'full_name', 'مستخدم جديد'),
     COALESCE(NEW.raw_user_meta_data->>'avatar_url', 'https://api.dicebear.com/7.x/avataaars/svg?seed=' || NEW.id),
     150,
     'user'

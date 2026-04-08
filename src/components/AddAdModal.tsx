@@ -69,19 +69,22 @@ export const AddAdModal = ({ onClose, professions, neighborhoods, userApiKey }: 
     if (!formData.description) return;
     setIsAnalyzing(true);
     try {
-      const response = await fetch('/api/ai/analyze-ad', {
+      const response = await fetch('/api/ai/analyze-text', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ description: formData.description })
+        body: JSON.stringify({ 
+          content: formData.description,
+          systemPrompt: 'أنت خبير تسويق في بورتسودان. حلل هذا الإعلان وقدم نصائح لتحسينه باللغة العربية.'
+        })
       });
       
       const result = await response.json();
       if (result.error) throw new Error(result.error);
-      const analysis = result.analysis;
+      const analysis = result.result;
       setAiAnalysis(analysis);
       // Log AI interaction
       if (user) {
-        await LogService.logAIInteraction(user.id, 'طبيب الإعلانات', formData.description, analysis);
+        await LogService.logAIInteraction(user.id, 'طبيب الإعلانات (DeepSeek)', formData.description, analysis);
       }
     } catch (e) {
       alert('فشل تحليل الإعلان.');

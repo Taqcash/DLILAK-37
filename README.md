@@ -1,20 +1,55 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# دليل خدمتك - بورتسودان (Dlilak Port Sudan) 🇸🇩
 
-# Run and deploy your AI Studio app
+المنصة الموحدة لربط المهنيين والأسر المنتجة في مدينة بورتسودان، السودان. تهدف المنصة إلى تسهيل الوصول للخدمات المحلية ودعم الاقتصاد المحلي باستخدام تقنيات الذكاء الاصطناعي.
 
-This contains everything you need to run your app locally.
+## 🚀 التقنيات المستخدمة
 
-View your app in AI Studio: https://ai.studio/apps/cf50f76d-9fd8-4946-962d-e9ca49659dab
+- **Framework:** [Next.js 14](https://nextjs.org/) (App Router)
+- **Database & Auth:** [Supabase](https://supabase.com/)
+- **AI:** [Google Gemini](https://ai.google.dev/) (تحليل الهويات) & [DeepSeek](https://www.deepseek.com/) (تحليل النصوص)
+- **Storage:** [Cloudinary](https://cloudinary.com/)
+- **Styling:** [Tailwind CSS](https://tailwindcss.com/)
+- **Animations:** [Framer Motion](https://www.framer.com/motion/)
+- **Deployment:** [Vercel](https://vercel.com/)
 
-## Run Locally
+## 📁 هيكل المشروع
 
-**Prerequisites:**  Node.js
+```text
+src/
+├── app/          # صفحات التطبيق (Next.js App Router)
+├── components/   # المكونات القابلة لإعادة الاستخدام
+├── lib/          # الإعدادات والأدوات المساعدة
+├── hooks/        # الخطافات المخصصة (Custom Hooks)
+├── services/     # خدمات الربط مع APIs (Supabase, AI, Cloudinary)
+└── types/        # تعريفات TypeScript
+```
 
+## 🛠️ البدء في العمل
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+1. **استنساخ المستودع:**
+   ```bash
+   git clone https://github.com/your-username/port-sudan-services.git
+   cd port-sudan-services
+   ```
+
+2. **تثبيت الحزم:**
+   ```bash
+   npm install
+   ```
+
+3. **إعداد متغيرات البيئة:**
+   قم بنسخ `.env.example` إلى `.env.local` وقم بتعبئة القيم المطلوبة.
+
+4. **تشغيل المشروع:**
+   ```bash
+   npm run dev
+   ```
+
+## 🧪 الاختبارات
+
+- **Unit Tests:** `npm test`
+- **E2E Tests:** `npm run test:e2e`
+
+## 📄 التراخيص
+
+هذا المشروع مرخص تحت رخصة MIT.

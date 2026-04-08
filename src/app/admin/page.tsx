@@ -108,14 +108,17 @@ export default function AdminDashboard() {
     if (!data) return;
     setIsGeneratingDeep(true);
     try {
-      const response = await fetch('/api/v1/analytics/deep-insights', {
+      const response = await fetch('/api/ai/analyze-text', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data.stats),
+        body: JSON.stringify({ 
+          content: JSON.stringify(data.stats),
+          systemPrompt: 'أنت محلل بيانات استراتيجي. حلل هذه الإحصائيات لمنصة دليل خدمتك في بورتسودان وقدم رؤى عميقة وتوصيات نمو باللغة العربية.'
+        }),
       });
       const result = await response.json();
       if (result.error) throw new Error(result.error);
-      setDeepInsights(result.insights);
+      setDeepInsights(result.result);
     } catch (e: any) {
       setDeepInsights('فشل إنشاء التقارير العميقة: ' + e.message);
     } finally {

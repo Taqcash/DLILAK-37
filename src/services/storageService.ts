@@ -1,42 +1,29 @@
-import { supabase } from '../lib/supabase';
-
 /**
  * StorageService - موديل إدارة الملفات والصور
  * مسؤول عن الرفع والحذف من Supabase Storage
  */
 export class StorageService {
   static async uploadImage(bucket: string, file: File, path: string) {
-    const { data, error } = await supabase.storage
-      .from(bucket)
-      .upload(path, file, {
-        cacheControl: '3600',
-        upsert: true
-      });
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('folder', bucket);
 
-    if (error) throw error;
+    const response = await fetch('/api/upload', {
+      method: 'POST',
+      body: formData,
+    });
 
-    const { data: { publicUrl } } = supabase.storage
-      .from(bucket)
-      .getPublicUrl(data.path);
-
-    return publicUrl;
+    const data = await response.json();
+    if (data.error) throw new Error(data.error);
+    return data.url;
   }
 
   static async uploadFile(bucket: string, file: File) {
-    const fileExt = file.name.split('.').pop();
-    const fileName = `${Math.random()}.${fileExt}`;
-    const filePath = `${fileName}`;
-
-    const { data, error } = await supabase.storage
-      .from(bucket)
-      .upload(filePath, file);
-
-    if (error) return { data: null, error };
-
-    const { data: { publicUrl } } = supabase.storage
-      .from(bucket)
-      .getPublicUrl(filePath);
-
-    return { data: { publicUrl }, error: null };
+    try {
+      const url = await this.uploadImage(bucket, file, '');
+      return { data: { publicUrl: url }, error: null };
+    } catch (error: any) {
+      return { data: null, error };
+    }
   }
 }
