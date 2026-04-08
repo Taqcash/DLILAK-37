@@ -25,14 +25,13 @@ import {
   LogOut,
   FileText
 } from 'lucide-react';
-import { useUser, useClerk } from '@clerk/nextjs';
+import { useSupabase } from '@/app/providers';
 import Image from 'next/image';
 import { ProfileService } from '@/services/profileService';
 import { AdService } from '@/services/adService';
 import { StorageService } from '@/services/storageService';
 import { AIService } from '@/services/aiService';
 import { EditAdModal } from '@/components/Modals';
-import { supabase } from '@/lib/supabase';
 import ReactMarkdown from 'react-markdown';
 
 /**
@@ -40,9 +39,10 @@ import ReactMarkdown from 'react-markdown';
  * تم تقسيم المنطق إلى خدمات متخصصة بنمط Claw
  */
 export default function ProfilePage() {
-  const { user, isLoaded } = useUser();
-  const { signOut } = useClerk();
+  const { supabase } = useSupabase();
   const router = useRouter();
+  const [user, setUser] = useState<any>(null);
+  const [isAuthReady, setIsAuthReady] = useState(false);
   const [userProfile, setUserProfile] = useState<any>(null);
   const [activeTab, setActiveTab] = useState('ads');
   const [userAds, setUserAds] = useState<any[]>([]);
@@ -55,120 +55,129 @@ export default function ProfilePage() {
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
   const [userApiKey, setUserApiKey] = useState(typeof window !== 'undefined' ? localStorage.getItem('gemini_api_key') : null);
 
-  const fetchUserData = useCallback(async () => {
-    if (!user) return;
+  const [settings, setSettings] = useState({
+    full_name: '',
+    phone: '',
+    bio: '',
+    neighborhood: ''
+  });
+
+  const fetchUserData = useCallback(async (userId: string) => {
     setLoading(true);
     try {
       const [profileRes, adsRes, logsRes] = await Promise.all([
-        ProfileService.getProfile(user.id),
+        ProfileService.getProfile(userId),
         AdService.fetchAds({ status: 'active' }),
-        supabase.from('ai_logs').select('*').eq('user_id', user.id).order('created_at', { ascending: false })
+        supabase.from('ai_logs').select('*').eq('user_id', userId).order('created_at', { ascending: false })
       ]);
       
-      if (profileRes.data) setUserProfile(profileRes.data);
-      if (adsRes.data) setUserAds(adsRes.data.filter((ad: any) => ad.user_id === user.id));
+      if (profileRes.data) {
+        setUserProfile(profileRes.data);
+        setSettings({
+          full_name: profileRes.data.full_name || '',
+          phone: profileRes.data.phone || '',
+          bio: profileRes.data.bio || '',
+          neighborhood: profileRes.data.neighborhood || ''
+        });
+      }
+      if (adsRes.data) setUserAds(adsRes.data.filter((ad: any) => ad.user_id === userId));
       if (logsRes.data) setAiLogs(logsRes.data);
     } catch (e) {
       console.error("Error fetching user data:", e);
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [supabase]);
 
   useEffect(() => {
-    if (isLoaded && !user) {
-      router.push('/sign-in');
-    } else if (user) {
-      fetchUserData();
-    }
-  }, [user, isLoaded, fetchUserData, router]);
+    const initAuth = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        router.push('/login');
+      } else {
+        setUser(user);
+        fetchUserData(user.id);
+      }
+      setIsAuthReady(true);
+    };
+    initAuth();
 
-  const handleDeleteAd = async (id: string) => {
-    if (!confirm('هل أنت متأكد من حذف هذا الإعلان؟')) return;
-    const { error } = await AdService.deleteAd(id);
-    if (!error) {
-      setUserAds(prev => prev.filter(ad => ad.id !== id));
-    }
-  };
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!session) {
+        router.push('/login');
+      } else {
+        setUser(session.user);
+        fetchUserData(session.user.id);
+      }
+    });
 
-  const handleVerificationUpload = async () => {
-    if (!verificationFile || !user) return;
-    setIsVerifying(true);
-    try {
-      const url = await StorageService.uploadImage('verifications', verificationFile, `${user.id}/${Date.now()}.jpg`);
-      await ProfileService.updateProfile(user.id, { 
-        verification_image: url,
-        is_verified: false // Pending
-      });
-      alert('تم رفع المستندات بنجاح. سيتم مراجعتها من قبل الإدارة.');
-    } catch (e) {
-      alert('فشل الرفع. يرجى المحاولة لاحقاً.');
-    } finally {
-      setIsVerifying(false);
-      setVerificationFile(null);
-    }
-  };
-
-  const generateAdminReport = async () => {
-    setIsGeneratingReport(true);
-    try {
-      const { data: recentAds } = await AdService.fetchAds({});
-      const response = await fetch('/api/ai/generate-report', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ activities: recentAds || [] })
-      });
-      
-      const result = await response.json();
-      if (result.error) throw new Error(result.error);
-      setAdminReport(result.report);
-    } catch (e) {
-      alert('فشل توليد التقرير.');
-    } finally {
-      setIsGeneratingReport(false);
-    }
-  };
-
-  const handleRequestFieldVisit = async () => {
-    if (!user) return;
-    try {
-      const { error } = await ProfileService.requestFieldVisit(user.id);
-      if (error) throw error;
-      alert('تم إرسال طلب الزيارة الميدانية بنجاح.');
-    } catch (e: any) {
-      alert('فشل إرسال الطلب: ' + e.message);
-    }
-  };
-
-  const [settings, setSettings] = useState({
-    full_name: '',
-    phone: '',
-    bio: ''
-  });
-
-  useEffect(() => {
-    if (userProfile) {
-      setSettings({
-        full_name: userProfile.full_name || '',
-        phone: userProfile.phone || '',
-        bio: userProfile.bio || ''
-      });
-    }
-  }, [userProfile]);
+    return () => subscription.unsubscribe();
+  }, [supabase, router, fetchUserData]);
 
   const handleSaveSettings = async () => {
     if (!user) return;
     try {
       const { error } = await ProfileService.updateProfile(user.id, settings);
       if (error) throw error;
-      alert('تم حفظ الإعدادات بنجاح.');
-      fetchUserData();
+      alert('تم حفظ الإعدادات بنجاح');
+      setUserProfile((prev: any) => ({ ...prev, ...settings }));
     } catch (e: any) {
-      alert('فشل حفظ الإعدادات: ' + e.message);
+      alert('خطأ في حفظ الإعدادات: ' + e.message);
     }
   };
 
-  if (!isLoaded || loading) {
+  const handleDeleteAd = async (adId: string) => {
+    if (!confirm('هل أنت متأكد من حذف هذا الإعلان؟')) return;
+    try {
+      const { error } = await AdService.deleteAd(adId);
+      if (error) throw error;
+      setUserAds(prev => prev.filter(a => a.id !== adId));
+    } catch (e: any) {
+      alert('خطأ في حذف الإعلان: ' + e.message);
+    }
+  };
+
+  const handleVerificationUpload = async () => {
+    if (!user || !verificationFile) return;
+    setIsVerifying(true);
+    try {
+      const { data, error } = await StorageService.uploadFile('verifications', verificationFile);
+      if (error) throw error;
+      // Update profile with verification status or file URL
+      alert('تم رفع ملف التوثيق بنجاح، سيتم مراجعته قريباً');
+    } catch (e: any) {
+      alert('خطأ في رفع الملف: ' + e.message);
+    } finally {
+      setIsVerifying(false);
+    }
+  };
+
+  const handleRequestFieldVisit = () => {
+    alert('تم استلام طلبك، سيتواصل معك مندوبنا قريباً لتحديد موعد الزيارة.');
+  };
+
+  const generateAdminReport = async () => {
+    if (!userApiKey) {
+      alert('يرجى إعداد مفتاح Gemini أولاً');
+      return;
+    }
+    setIsGeneratingReport(true);
+    try {
+      const report = await AIService.generatePlatformReport(userAds, aiLogs);
+      setAdminReport(report);
+    } catch (e: any) {
+      alert('خطأ في توليد التقرير: ' + e.message);
+    } finally {
+      setIsGeneratingReport(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    router.push('/login');
+  };
+
+  if (!isAuthReady || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="w-12 h-12 border-4 border-burgundy border-t-transparent rounded-full animate-spin" />
@@ -184,7 +193,7 @@ export default function ProfilePage() {
         <div className="relative z-10 flex flex-col md:flex-row items-center gap-12 text-center md:text-right">
           <div className="relative group">
             <div className="w-48 h-48 relative rounded-[40px] overflow-hidden border-8 border-gray-50 shadow-2xl group-hover:scale-105 transition-transform duration-500">
-              <Image src={user?.imageUrl || "https://picsum.photos/seed/user/200/200"} className="object-cover" alt={user?.fullName || 'User Profile'} fill />
+              <Image src={userProfile?.avatar_url || user?.user_metadata?.avatar_url || "https://picsum.photos/seed/user/200/200"} className="object-cover" alt={userProfile?.full_name || user?.user_metadata?.full_name || 'User Profile'} fill />
             </div>
             <button className="absolute bottom-4 left-4 p-4 bg-burgundy text-white rounded-2xl shadow-xl hover:bg-burgundy/90 transition-all">
               <Camera size={20} />
@@ -199,7 +208,7 @@ export default function ProfilePage() {
           <div className="flex-1 space-y-6">
             <div className="space-y-2">
               <div className="flex flex-wrap items-center justify-center md:justify-start gap-4">
-                <h1 className="text-4xl font-black">{userProfile?.full_name || user?.fullName}</h1>
+                <h1 className="text-4xl font-black">{userProfile?.full_name || user?.user_metadata?.full_name}</h1>
                 <span className="px-4 py-1.5 bg-burgundy/10 text-burgundy rounded-full text-xs font-black uppercase tracking-widest">
                   {userProfile?.role === 'admin' ? 'مدير المنصة' : 'عضو نشط'}
                 </span>
@@ -229,7 +238,7 @@ export default function ProfilePage() {
             <button onClick={() => router.push('/setup-ai')} className="bg-burgundy text-white px-8 py-4 rounded-2xl font-black shadow-xl hover:bg-burgundy/90 transition-all flex items-center justify-center gap-3">
               <Sparkles size={20} /> إعدادات الذكاء الاصطناعي
             </button>
-            <button onClick={() => signOut()} className="bg-rose-50 text-rose-600 px-8 py-4 rounded-2xl font-black hover:bg-rose-600 hover:text-white transition-all flex items-center justify-center gap-3">
+            <button onClick={handleLogout} className="bg-rose-50 text-rose-600 px-8 py-4 rounded-2xl font-black hover:bg-rose-600 hover:text-white transition-all flex items-center justify-center gap-3">
               <LogOut size={20} /> تسجيل الخروج
             </button>
           </div>

@@ -9,7 +9,7 @@ export class ForumService {
   static async fetchForumPosts() {
     return await supabase
       .from('forum_posts')
-      .select('*, profiles(fullName, avatar_url)')
+      .select('*, profiles(full_name, avatar_url)')
       .order('created_at', { ascending: false })
       .returns<ForumPost[]>();
   }

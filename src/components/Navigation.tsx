@@ -17,7 +17,7 @@ import {
   Briefcase,
   LayoutDashboard
 } from 'lucide-react';
-import { useUser, useClerk, SignedIn, SignedOut, UserButton } from '@clerk/nextjs';
+import { useSupabase } from '@/app/providers';
 import Image from 'next/image';
 import { Logo } from './Logo';
 
@@ -26,9 +26,23 @@ import { Profile, Notification } from '../types';
 export const NavigationHeader = ({ userProfile, notifications, onShowNotifications }: { userProfile: Profile | null, notifications: Notification[], onShowNotifications: () => void }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const pathname = usePathname();
-  const { signOut } = useClerk();
+  const { supabase } = useSupabase();
   const router = useRouter();
-  const { user } = useUser();
+  const [user, setUser] = useState<any>(null);
+
+  React.useEffect(() => {
+    const getUser = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      setUser(user);
+    };
+    getUser();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+    });
+
+    return () => subscription.unsubscribe();
+  }, [supabase]);
 
   const navLinks = [
     { href: '/', icon: <Home size={20} />, label: 'الرئيسية' },
@@ -41,8 +55,9 @@ export const NavigationHeader = ({ userProfile, notifications, onShowNotificatio
   }
 
   const handleLogout = async () => {
-    await signOut();
-    router.push('/sign-in');
+    await supabase.auth.signOut();
+    router.push('/login');
+    router.refresh();
   };
 
   return (
@@ -70,32 +85,35 @@ export const NavigationHeader = ({ userProfile, notifications, onShowNotificatio
         </div>
 
         <div className="flex items-center gap-3">
-          <SignedIn>
-            <button 
-              onClick={onShowNotifications}
-              className="p-3 bg-gray-50 text-gray-500 rounded-2xl hover:bg-gray-100 transition-all relative group"
-            >
-              <Bell size={20} className="group-hover:rotate-12 transition-transform" />
-              {notifications.length > 0 && (
-                <span className="absolute top-2 right-2 w-4 h-4 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center border-2 border-white">
-                  {notifications.length}
-                </span>
-              )}
-            </button>
-            <Link href="/profile" className="flex items-center gap-3 p-1.5 pr-4 bg-gray-50 rounded-2xl hover:bg-gray-100 transition-all group">
-              <div className="text-right hidden sm:block">
-                <p className="text-xs font-black group-hover:text-burgundy transition-colors">{userProfile?.fullName || user?.fullName}</p>
-                <p className="text-[10px] text-gray-400 font-bold">ملفي الشخصي</p>
-              </div>
-              <div className="w-10 h-10 relative bg-white rounded-xl shadow-sm flex items-center justify-center overflow-hidden border border-gray-100">
-                {user?.imageUrl ? <Image src={user.imageUrl} className="object-cover" alt={user?.fullName || 'User'} fill /> : <User size={20} className="text-gray-300" />}
-              </div>
-            </Link>
-            <UserButton afterSignOutUrl="/sign-in" />
-          </SignedIn>
-          <SignedOut>
-            <Link href="/sign-in" className="bg-burgundy text-white px-8 py-3 rounded-2xl font-black text-sm shadow-lg hover:bg-burgundy/90 transition-all">دخول / تسجيل</Link>
-          </SignedOut>
+          {user ? (
+            <>
+              <button 
+                onClick={onShowNotifications}
+                className="p-3 bg-gray-50 text-gray-500 rounded-2xl hover:bg-gray-100 transition-all relative group"
+              >
+                <Bell size={20} className="group-hover:rotate-12 transition-transform" />
+                {notifications.length > 0 && (
+                  <span className="absolute top-2 right-2 w-4 h-4 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center border-2 border-white">
+                    {notifications.length}
+                  </span>
+                )}
+              </button>
+              <Link href="/profile" className="flex items-center gap-3 p-1.5 pr-4 bg-gray-50 rounded-2xl hover:bg-gray-100 transition-all group">
+                <div className="text-right hidden sm:block">
+                  <p className="text-xs font-black group-hover:text-burgundy transition-colors">{userProfile?.full_name || user?.email}</p>
+                  <p className="text-[10px] text-gray-400 font-bold">ملفي الشخصي</p>
+                </div>
+                <div className="w-10 h-10 relative bg-white rounded-xl shadow-sm flex items-center justify-center overflow-hidden border border-gray-100">
+                  {userProfile?.avatar_url ? <Image src={userProfile.avatar_url} className="object-cover" alt={userProfile?.full_name || 'User'} fill /> : <User size={20} className="text-gray-300" />}
+                </div>
+              </Link>
+              <button onClick={handleLogout} className="p-3 bg-gray-50 text-gray-500 rounded-2xl hover:bg-red-50 hover:text-red-500 transition-all">
+                <LogOut size={20} />
+              </button>
+            </>
+          ) : (
+            <Link href="/login" className="bg-burgundy text-white px-8 py-3 rounded-2xl font-black text-sm shadow-lg hover:bg-burgundy/90 transition-all">دخول / تسجيل</Link>
+          )}
           <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="md:hidden p-3 bg-gray-50 rounded-2xl"><Menu size={20} /></button>
         </div>
       </div>

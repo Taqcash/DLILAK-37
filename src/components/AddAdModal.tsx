@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   X, 
@@ -19,7 +19,7 @@ import {
   Star,
   Plus
 } from 'lucide-react';
-import { useUser } from '@clerk/nextjs';
+import { useSupabase } from '@/app/providers';
 import Image from 'next/image';
 import { AdService } from '@/services/adService';
 import { ProfileService } from '@/services/profileService';
@@ -33,7 +33,8 @@ import ReactMarkdown from 'react-markdown';
  * تم تقسيم المنطق إلى AdService و ProfileService بنمط Claw
  */
 export const AddAdModal = ({ onClose, professions, neighborhoods, userApiKey }: any) => {
-  const { user } = useUser();
+  const { supabase } = useSupabase();
+  const [user, setUser] = useState<any>(null);
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
@@ -51,6 +52,10 @@ export const AddAdModal = ({ onClose, professions, neighborhoods, userApiKey }: 
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => setUser(user));
+  }, [supabase]);
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];

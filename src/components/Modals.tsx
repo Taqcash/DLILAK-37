@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { X, Star, Send, Save, Trash2, Camera } from 'lucide-react';
-import { useUser } from '@clerk/nextjs';
+import { useSupabase } from '@/app/providers';
 import { AdService } from '../services/adService';
 import { RatingService } from '../services/ratingService';
 import { AdminService } from '../services/adminService';
@@ -132,10 +132,15 @@ export const EditAdModal = ({ ad, onClose, onUpdate }: { ad: Ad, onClose: () => 
 };
 
 export const RatingModal = ({ service, onClose }: { service: Ad, onClose: () => void }) => {
-  const { user } = useUser();
+  const { supabase } = useSupabase();
+  const [user, setUser] = useState<any>(null);
   const [rating, setRating] = useState(0);
   const [comment, setComment] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => setUser(user));
+  }, [supabase]);
 
   const handleSubmit = async () => {
     if (rating === 0 || !user) return;
@@ -192,9 +197,14 @@ export const RatingModal = ({ service, onClose }: { service: Ad, onClose: () => 
 };
 
 export const ContactAdminModal = ({ onClose }: { onClose: () => void }) => {
-  const { user } = useUser();
+  const { supabase } = useSupabase();
+  const [user, setUser] = useState<any>(null);
   const [message, setMessage] = useState('');
   const [sending, setSending] = useState(false);
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => setUser(user));
+  }, [supabase]);
 
   const handleSend = async () => {
     if (!message || !user) return;

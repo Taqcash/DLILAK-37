@@ -16,7 +16,7 @@ export class AdminService {
   static async fetchAdminMessages() {
     return await supabase
       .from('admin_messages')
-      .select('*, profiles(fullName, email)')
+      .select('*, profiles(full_name, email)')
       .order('created_at', { ascending: false });
   }
 }

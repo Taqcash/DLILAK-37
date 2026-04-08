@@ -25,7 +25,7 @@ import {
   Info
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { useUser } from '@clerk/nextjs';
+import { useSupabase } from '@/app/providers';
 import Image from 'next/image';
 import { AdService } from '@/services/adService';
 import { RatingService } from '@/services/ratingService';
@@ -41,7 +41,9 @@ export default function ServiceDetailPage() {
   const params = useParams();
   const id = params.id as string;
   const router = useRouter();
-  const { user, isLoaded } = useUser();
+  const { supabase } = useSupabase();
+  const [user, setUser] = useState<any>(null);
+  const [isAuthReady, setIsAuthReady] = useState(false);
   const [ad, setAd] = useState<any>(null);
   const [ratings, setRatings] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -50,6 +52,21 @@ export default function ServiceDetailPage() {
   const [rating, setRating] = useState(5);
   const [comment, setComment] = useState('');
   const [isSubmittingRating, setIsSubmittingRating] = useState(false);
+
+  useEffect(() => {
+    const initAuth = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      setUser(user);
+      setIsAuthReady(true);
+    };
+    initAuth();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+    });
+
+    return () => subscription.unsubscribe();
+  }, [supabase]);
 
   const fetchData = useCallback(async () => {
     setLoading(true);

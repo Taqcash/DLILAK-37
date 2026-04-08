@@ -31,14 +31,16 @@ import {
 import { AnalyticsService } from '@/services/analyticsService';
 import { ProfileService } from '@/services/profileService';
 import { AIService } from '@/services/aiService';
-import { useUser } from '@clerk/nextjs';
+import { useSupabase } from '@/app/providers';
 import ReactMarkdown from 'react-markdown';
 import Image from 'next/image';
 
 const COLORS = ['#800020', '#A52A2A', '#D2691E', '#8B4513', '#5D0017'];
 
 export default function AdminDashboard() {
-  const { user, isLoaded } = useUser();
+  const { supabase } = useSupabase();
+  const [user, setUser] = useState<any>(null);
+  const [isAuthReady, setIsAuthReady] = useState(false);
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'analytics' | 'verifications' | 'visits'>('analytics');
@@ -49,6 +51,22 @@ export default function AdminDashboard() {
   const [userApiKey] = useState(typeof window !== 'undefined' ? localStorage.getItem('gemini_api_key') : null);
 
   useEffect(() => {
+    const initAuth = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        window.location.href = '/login';
+      } else {
+        setUser(user);
+        // Check if admin
+        const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+        if (profile?.role !== 'admin') {
+          window.location.href = '/';
+        }
+      }
+      setIsAuthReady(true);
+    };
+    initAuth();
+
     const fetchData = async () => {
       const [analytics, verifs, visits] = await Promise.all([
         AnalyticsService.getAnalyticsData(),
@@ -61,7 +79,7 @@ export default function AdminDashboard() {
       setLoading(false);
     };
     fetchData();
-  }, []);
+  }, [supabase]);
 
   const handleApproveVerification = async (userId: string) => {
     try {
@@ -146,7 +164,7 @@ export default function AdminDashboard() {
     return Object.entries(counts).map(([name, value]) => ({ name, value }));
   }, [data]);
 
-  if (loading || !isLoaded) {
+  if (loading || !isAuthReady) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1 }} className="w-12 h-12 border-4 border-burgundy border-t-transparent rounded-full" />
@@ -177,7 +195,7 @@ export default function AdminDashboard() {
               <span className="absolute top-2 right-2 w-2 h-2 bg-burgundy rounded-full border-2 border-white" />
             </button>
             <div className="w-12 h-12 relative rounded-2xl overflow-hidden border-2 border-white shadow-lg">
-              <Image src={user?.imageUrl || "https://picsum.photos/seed/user/100/100"} className="object-cover" alt="Admin" fill />
+              <Image src={user?.user_metadata?.avatar_url || "https://picsum.photos/seed/user/100/100"} className="object-cover" alt="Admin" fill />
             </div>
           </div>
         </header>
@@ -406,10 +424,10 @@ export default function AdminDashboard() {
                 <div key={v.id} className="p-8 flex items-center justify-between hover:bg-gray-50 transition-all">
                   <div className="flex items-center gap-6">
                     <div className="w-16 h-16 relative rounded-2xl overflow-hidden border border-gray-100">
-                      <Image src={v.avatar_url || "https://picsum.photos/seed/user/100/100"} className="object-cover" alt={v.fullName} fill />
+                      <Image src={v.avatar_url || "https://picsum.photos/seed/user/100/100"} className="object-cover" alt={v.full_name} fill />
                     </div>
                     <div>
-                      <h4 className="text-lg font-black">{v.fullName}</h4>
+                      <h4 className="text-lg font-black">{v.full_name}</h4>
                       <p className="text-sm text-gray-400 font-bold">{v.email}</p>
                     </div>
                   </div>
@@ -443,10 +461,10 @@ export default function AdminDashboard() {
                 <div key={r.id} className="p-8 flex items-center justify-between hover:bg-gray-50 transition-all">
                   <div className="flex items-center gap-6">
                     <div className="w-16 h-16 relative rounded-2xl overflow-hidden border border-gray-100">
-                      <Image src={r.profiles?.avatar_url || "https://picsum.photos/seed/user/100/100"} className="object-cover" alt={r.profiles?.fullName} fill />
+                      <Image src={r.profiles?.avatar_url || "https://picsum.photos/seed/user/100/100"} className="object-cover" alt={r.profiles?.full_name} fill />
                     </div>
                     <div>
-                      <h4 className="text-lg font-black">{r.profiles?.fullName}</h4>
+                      <h4 className="text-lg font-black">{r.profiles?.full_name}</h4>
                       <div className="flex items-center gap-3 mt-1">
                         <p className="text-xs text-gray-400 font-bold flex items-center gap-1"><MapPin size={12} /> {r.profiles?.neighborhood}</p>
                         <p className="text-xs text-gray-400 font-bold flex items-center gap-1"><Phone size={12} /> {r.profiles?.phone}</p>

@@ -24,9 +24,9 @@ export class ProfileService {
         .from('profiles')
         .insert({
           id: user.id,
-          fullName: user.fullName || user.username || 'مستخدم جديد',
-          avatar_url: user.imageUrl,
-          email: user.primaryEmailAddress?.emailAddress,
+          full_name: user.user_metadata?.full_name || user.email?.split('@')[0] || 'مستخدم جديد',
+          avatar_url: user.user_metadata?.avatar_url,
+          email: user.email,
           role: 'user',
           points: 100
         })
@@ -54,7 +54,7 @@ export class ProfileService {
   static async fetchFieldVisitRequests() {
     return await supabase
       .from('field_visit_requests')
-      .select('*, profiles(fullName, avatar_url, neighborhood, phone)')
+      .select('*, profiles(full_name, avatar_url, neighborhood, phone)')
       .order('created_at', { ascending: false })
       .returns<FieldVisitRequest[]>();
   }

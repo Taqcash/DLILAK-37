@@ -1,4 +1,4 @@
-import { ClerkProvider } from '@clerk/nextjs';
+import SupabaseProvider from './providers';
 import { Cairo } from 'next/font/google';
 import './globals.css';
 
@@ -11,12 +11,12 @@ export const metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <ClerkProvider>
-      <html lang="ar" dir="rtl">
-        <body className={`${cairo.variable} font-sans bg-white text-gray-900`}>
+    <html lang="ar" dir="rtl">
+      <body className={`${cairo.variable} font-sans bg-white text-gray-900`}>
+        <SupabaseProvider>
           {children}
-        </body>
-      </html>
-    </ClerkProvider>
+        </SupabaseProvider>
+      </body>
+    </html>
   );
 }

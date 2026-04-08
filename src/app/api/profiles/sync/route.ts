@@ -1,17 +1,16 @@
-import { auth, currentUser } from "@clerk/nextjs/server";
+import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
-import { supabase } from "@/lib/supabase";
 
 export async function POST() {
-  const { userId } = auth();
-  const user = await currentUser();
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
 
-  if (!userId || !user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { data: profile, error } = await supabase
     .from('profiles')
     .select('*')
-    .eq('id', userId)
+    .eq('id', user.id)
     .single();
 
   if (error && error.code === 'PGRST116') {
@@ -19,10 +18,10 @@ export async function POST() {
     const { data: newProfile, error: createError } = await supabase
       .from('profiles')
       .insert({
-        id: userId,
-        email: user.emailAddresses[0].emailAddress,
-        full_name: `${user.firstName} ${user.lastName}`,
-        avatar_url: user.imageUrl,
+        id: user.id,
+        email: user.email,
+        full_name: user.user_metadata?.full_name || user.email?.split('@')[0],
+        avatar_url: user.user_metadata?.avatar_url,
         role: 'user',
         points: 0,
         is_verified: false

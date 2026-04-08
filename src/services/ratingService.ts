@@ -10,7 +10,7 @@ export class RatingService {
   static async fetchRatings(adId: string) {
     return await supabase
       .from('ratings')
-      .select('*, profiles(fullName, avatar_url)')
+      .select('*, profiles(full_name, avatar_url)')
       .eq('ad_id', adId)
       .order('created_at', { ascending: false })
       .returns<Rating[]>();

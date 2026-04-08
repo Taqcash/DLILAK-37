@@ -1,10 +1,11 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
-    "module": "ESNext",
-    "moduleResolution": "Bundler",
+    "module": "CommonJS",
+    "moduleResolution": "Node",
     "outDir": "dist",
-    "noEmit": false
+    "noEmit": false,
+    "rootDir": "."
   },
   "include": ["server.ts", "src/backend/**/*.ts"]
 }

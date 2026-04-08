@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { useUser } from '@clerk/nextjs';
+import { useSupabase } from '@/app/providers';
 import { motion, AnimatePresence } from 'motion/react';
 import { Send, ArrowRight, User, ShieldCheck, MoreVertical, Phone } from 'lucide-react';
 import Image from 'next/image';
@@ -17,8 +17,10 @@ import { Profile } from '@/types';
 export default function ChatPage() {
   const params = useParams();
   const otherId = params.id as string;
-  const { user, isLoaded } = useUser();
+  const { supabase } = useSupabase();
   const router = useRouter();
+  const [user, setUser] = useState<any>(null);
+  const [isAuthReady, setIsAuthReady] = useState(false);
   const [otherProfile, setOtherProfile] = useState<Profile | null>(null);
   const [newMessage, setNewMessage] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -27,10 +29,27 @@ export default function ChatPage() {
   const { messages, loading, sendMessage } = useChat(user?.id, otherId);
 
   useEffect(() => {
-    if (isLoaded && !user) {
-      router.push('/sign-in');
-    }
-  }, [isLoaded, user, router]);
+    const initAuth = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        router.push('/login');
+      } else {
+        setUser(user);
+      }
+      setIsAuthReady(true);
+    };
+    initAuth();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!session) {
+        router.push('/login');
+      } else {
+        setUser(session.user);
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, [supabase, router]);
 
   useEffect(() => {
     const loadProfile = async () => {
@@ -53,7 +72,7 @@ export default function ChatPage() {
     }
   }, [messages]);
 
-  if (!isLoaded || loading) {
+  if (!isAuthReady || loading) {
     return (
       <div className="h-screen flex items-center justify-center bg-gray-50">
         <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1 }} className="w-12 h-12 border-4 border-burgundy border-t-transparent rounded-full" />
@@ -71,11 +90,11 @@ export default function ChatPage() {
           </button>
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 relative rounded-2xl overflow-hidden border border-gray-100">
-              <Image src={otherProfile?.avatar_url || "https://picsum.photos/seed/user/100/100"} className="object-cover" alt={otherProfile?.fullName || 'User'} fill />
+              <Image src={otherProfile?.avatar_url || "https://picsum.photos/seed/user/100/100"} className="object-cover" alt={otherProfile?.full_name || 'User'} fill />
             </div>
             <div>
               <div className="flex items-center gap-1">
-                <h2 className="font-black text-lg">{otherProfile?.fullName}</h2>
+                <h2 className="font-black text-lg">{otherProfile?.full_name}</h2>
                 {otherProfile?.is_verified && <ShieldCheck size={16} className="text-blue-500" />}
               </div>
               <p className="text-[10px] text-green-500 font-bold uppercase tracking-widest">متصل الآن</p>

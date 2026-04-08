@@ -124,4 +124,12 @@ export class AIService {
 
     return response.text || "عذراً، لم أتمكن من التحليل حالياً.";
   }
+
+  static async generatePlatformReport(ads: any[], logs: any[]) {
+    const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
+    if (!apiKey) throw new Error("API Key missing");
+    
+    const ai = new AIService(apiKey);
+    return await ai.generateAdminReport([...ads, ...logs]);
+  }
 }

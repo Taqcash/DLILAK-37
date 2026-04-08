@@ -14,7 +14,7 @@ export class AdService {
 
     let query = supabase
       .from('ads')
-      .select('*, profiles(fullName, avatar_url, is_verified, is_field_verified)', { count: 'exact' })
+      .select('*, profiles(full_name, avatar_url, is_verified, is_field_verified)', { count: 'exact' })
       .order('is_premium', { ascending: false })
       .order('created_at', { ascending: false })
       .range(from, to);
@@ -30,7 +30,7 @@ export class AdService {
   static async getAd(id: string) {
     return await supabase
       .from('ads')
-      .select('*, profiles(fullName, avatar_url, is_verified, is_field_verified)')
+      .select('*, profiles(full_name, avatar_url, is_verified, is_field_verified)')
       .eq('id', id)
       .single<Ad>();
   }

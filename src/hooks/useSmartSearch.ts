@@ -8,7 +8,7 @@ import { Ad } from '@/types';
  * useSmartSearch - هوك مخصص للبحث الذكي
  * يربط بين Gemini و AdService
  */
-export function useSmartSearch(apiKey: string | null) {
+export function useSmartSearch() {
   const [ads, setAds] = useState<Ad[]>([]);
   const [loading, setLoading] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
@@ -48,7 +48,7 @@ export function useSmartSearch(apiKey: string | null) {
       setIsSearching(false);
       setLoading(false);
     }
-  }, [apiKey]);
+  }, []);
 
   return { ads, loading, isSearching, search, setAds };
 }

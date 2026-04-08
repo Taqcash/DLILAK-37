@@ -20,12 +20,11 @@ import {
   X,
   Search
 } from 'lucide-react';
-import { useUser } from '@clerk/nextjs';
+import { useSupabase } from '@/app/providers';
 import Image from 'next/image';
 import { ForumService } from '@/services/forumService';
 import { ProfileService } from '@/services/profileService';
 import { AIService } from '@/services/aiService';
-import { supabase } from '@/lib/supabase';
 import { useRealtime } from '@/hooks/useRealtime';
 import ReactMarkdown from 'react-markdown';
 import { PROFESSIONS, NEIGHBORHOODS } from '@/lib/constants';
@@ -35,7 +34,9 @@ import { PROFESSIONS, NEIGHBORHOODS } from '@/lib/constants';
  * تم تقسيم المنطق إلى ForumService و ProfileService بنمط Claw
  */
 export default function ForumPage() {
-  const { user, isLoaded } = useUser();
+  const { supabase } = useSupabase();
+  const [user, setUser] = useState<any>(null);
+  const [isAuthReady, setIsAuthReady] = useState(false);
   const [posts, setPosts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [newPost, setNewPost] = useState('');
@@ -52,7 +53,20 @@ export default function ForumPage() {
 
   useEffect(() => {
     fetchPosts();
-  }, [fetchPosts]);
+    
+    const initAuth = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      setUser(user);
+      setIsAuthReady(true);
+    };
+    initAuth();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+    });
+
+    return () => subscription.unsubscribe();
+  }, [fetchPosts, supabase]);
 
   // Real-time updates
   useRealtime('forum_posts', (payload) => {
@@ -119,7 +133,7 @@ export default function ForumPage() {
           <div className="absolute top-0 right-0 w-32 h-32 bg-burgundy/5 rounded-full -translate-y-1/2 translate-x-1/2 blur-2xl" />
           <div className="flex gap-4 items-start relative z-10">
             <div className="w-14 h-14 relative bg-gray-50 rounded-2xl flex items-center justify-center shrink-0 border border-gray-100 overflow-hidden shadow-sm">
-              {user?.imageUrl ? <Image src={user.imageUrl} className="object-cover" alt={user.fullName || 'User'} fill /> : <User size={24} className="text-gray-300" />}
+              {user?.user_metadata?.avatar_url ? <Image src={user.user_metadata.avatar_url} className="object-cover" alt={user.user_metadata.full_name || 'User'} fill /> : <User size={24} className="text-gray-300" />}
             </div>
             <div className="flex-1 space-y-4">
               <textarea 

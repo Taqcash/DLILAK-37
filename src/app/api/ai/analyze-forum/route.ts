@@ -5,7 +5,7 @@ import { PROFESSIONS, NEIGHBORHOODS } from "@/lib/constants";
 export async function POST(req: Request) {
   try {
     const { content } = await req.json();
-    const apiKey = process.env.GEMINI_API_KEY;
+    const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
 
     if (!apiKey) {
       return NextResponse.json({ error: "API Key missing" }, { status: 500 });

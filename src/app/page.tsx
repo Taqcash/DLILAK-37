@@ -1,9 +1,9 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { SignedIn, SignedOut, UserButton } from "@clerk/nextjs";
+import { useSupabase } from '@/app/providers';
 import Link from "next/link";
-import { Search, Sparkles, MapPin, Briefcase, Zap, Star, ArrowRight } from "lucide-react";
+import { Search, Sparkles, MapPin, Briefcase, Zap, Star, ArrowRight, User, LogOut } from "lucide-react";
 import { motion, AnimatePresence } from 'motion/react';
 import Image from 'next/image';
 import { AdService } from '@/services/adService';
@@ -17,9 +17,11 @@ import { Ad } from '@/types';
 export default function LandingPage() {
   const [query, setQuery] = useState('');
   const [userApiKey] = useState(typeof window !== 'undefined' ? localStorage.getItem('gemini_api_key') : null);
+  const { supabase } = useSupabase();
+  const [user, setUser] = useState<any>(null);
   
   // استخدام الهوك المخصص للبحث الذكي
-  const { ads, loading, isSearching, search, setAds } = useSmartSearch(userApiKey);
+  const { ads, loading, isSearching, search, setAds } = useSmartSearch();
 
   // جلب الإعلانات الأولية
   const fetchInitialAds = useCallback(async () => {
@@ -29,13 +31,30 @@ export default function LandingPage() {
 
   useEffect(() => {
     fetchInitialAds();
-  }, [fetchInitialAds]);
+    
+    const getUser = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      setUser(user);
+    };
+    getUser();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+    });
+
+    return () => subscription.unsubscribe();
+  }, [fetchInitialAds, supabase]);
 
   const handleSmartSearch = async () => {
     const smartFilters = await search(query);
     if (smartFilters) {
       alert(`تم تطبيق الفلاتر الذكية: ${smartFilters.profession} في ${smartFilters.neighborhood}`);
     }
+  };
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    window.location.reload();
   };
 
   return (
@@ -51,14 +70,19 @@ export default function LandingPage() {
             <Link href="/forum" className="text-sm font-bold text-gray-500 hover:text-burgundy transition-colors">المنتدى</Link>
             <Link href="/about" className="text-sm font-bold text-gray-500 hover:text-burgundy transition-colors">عن بورتسودان</Link>
           </div>
-          <SignedIn>
-            <Link href="/profile" className="text-sm font-bold text-gray-500 hover:text-burgundy transition-colors">ملفي الشخصي</Link>
-            <UserButton afterSignOutUrl="/" />
-          </SignedIn>
-          <SignedOut>
-            <Link href="/sign-in" className="text-sm font-bold text-gray-500 hover:text-burgundy transition-colors">دخول</Link>
-            <Link href="/sign-up" className="bg-burgundy text-white px-6 py-2 rounded-xl font-black text-sm shadow-lg hover:bg-burgundy/90 transition-all">ابدأ الآن</Link>
-          </SignedOut>
+          {user ? (
+            <div className="flex items-center gap-4">
+              <Link href="/profile" className="text-sm font-bold text-gray-500 hover:text-burgundy transition-colors">ملفي الشخصي</Link>
+              <button onClick={handleLogout} className="p-2 bg-gray-50 text-gray-500 rounded-xl hover:bg-red-50 hover:text-red-500 transition-all">
+                <LogOut size={20} />
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-4">
+              <Link href="/login" className="text-sm font-bold text-gray-500 hover:text-burgundy transition-colors">دخول</Link>
+              <Link href="/login" className="bg-burgundy text-white px-6 py-2 rounded-xl font-black text-sm shadow-lg hover:bg-burgundy/90 transition-all">ابدأ الآن</Link>
+            </div>
+          )}
         </div>
       </nav>
 
@@ -158,10 +182,10 @@ export default function LandingPage() {
                         <div className="flex items-center justify-between pt-6 border-t border-gray-50">
                           <div className="flex items-center gap-3">
                             <div className="w-10 h-10 relative rounded-xl overflow-hidden border border-gray-100">
-                              <Image src={ad.profiles?.avatar_url || "https://picsum.photos/seed/user/100/100"} className="object-cover" alt={ad.profiles?.fullName || 'User'} fill />
+                              <Image src={ad.profiles?.avatar_url || "https://picsum.photos/seed/user/100/100"} className="object-cover" alt={ad.profiles?.full_name || 'User'} fill />
                             </div>
                             <div>
-                              <p className="text-xs font-black">{ad.profiles?.fullName}</p>
+                              <p className="text-xs font-black">{ad.profiles?.full_name}</p>
                               <p className="text-[10px] text-gray-400 font-bold flex items-center gap-1"><MapPin size={10} /> {ad.neighborhood}</p>
                             </div>
                           </div>

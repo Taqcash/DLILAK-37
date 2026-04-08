@@ -1,6 +1,6 @@
 export interface Profile {
   id: string;
-  fullName: string;
+  full_name: string;
   avatar_url: string;
   email: string;
   role: 'user' | 'admin';
