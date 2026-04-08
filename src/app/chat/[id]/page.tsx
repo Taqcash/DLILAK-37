@@ -6,20 +6,24 @@ import { useUser } from '@clerk/nextjs';
 import { motion, AnimatePresence } from 'motion/react';
 import { Send, ArrowRight, User, ShieldCheck, MoreVertical, Phone } from 'lucide-react';
 import Image from 'next/image';
-import { DBService } from '@/services/dbService';
-import { supabase } from '@/lib/supabase';
-import { Message, Profile } from '@/types';
+import { ProfileService } from '@/services/profileService';
+import { useChat } from '@/hooks/useChat';
+import { Profile } from '@/types';
 
+/**
+ * ChatPage - صفحة المحادثة
+ * تم فصل منطق الرسائل والاشتراك اللحظي في هوك useChat
+ */
 export default function ChatPage() {
   const params = useParams();
   const otherId = params.id as string;
   const { user, isLoaded } = useUser();
   const router = useRouter();
-  const [messages, setMessages] = useState<Message[]>([]);
   const [otherProfile, setOtherProfile] = useState<Profile | null>(null);
   const [newMessage, setNewMessage] = useState('');
-  const [loading, setLoading] = useState(true);
-  const scrollRef = useRef<HTMLDivElement>(null);
+  
+  // استخدام الهوك المخصص للدردشة
+  const { messages, loading, sendMessage } = useChat(user?.id, otherId);
 
   useEffect(() => {
     if (isLoaded && !user) {
@@ -28,58 +32,18 @@ export default function ChatPage() {
   }, [isLoaded, user, router]);
 
   useEffect(() => {
-    if (!user) return;
-
-    const loadChat = async () => {
-      setLoading(true);
-      // Fetch other user profile
-      const { data: profile } = await DBService.getProfile(otherId);
+    const loadProfile = async () => {
+      const { data: profile } = await ProfileService.getProfile(otherId);
       if (profile) setOtherProfile(profile);
-
-      // Fetch messages
-      const { data } = await DBService.fetchMessages(user.id, otherId);
-      if (data) setMessages(data);
-      setLoading(false);
     };
-
-    loadChat();
-
-    // Subscribe to real-time messages
-    const channel = supabase
-      .channel(`chat:${user.id}:${otherId}`)
-      .on('postgres_changes', { 
-        event: 'INSERT', 
-        schema: 'public', 
-        table: 'messages',
-        filter: `or(and(sender_id.eq.${user.id},receiver_id.eq.${otherId}),and(sender_id.eq.${otherId},receiver_id.eq.${user.id}))`
-      }, (payload) => {
-        setMessages(prev => [...prev, payload.new as Message]);
-      })
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [user, otherId]);
-
-  useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  }, [messages]);
+    loadProfile();
+  }, [otherId]);
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user || !newMessage.trim()) return;
-
-    const content = newMessage;
+    if (!newMessage.trim()) return;
+    await sendMessage(newMessage);
     setNewMessage('');
-
-    try {
-      await DBService.sendMessage(user.id, otherId, content);
-    } catch (error) {
-      console.error("Failed to send message:", error);
-    }
   };
 
   if (!isLoaded || loading) {

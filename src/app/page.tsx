@@ -6,50 +6,35 @@ import Link from "next/link";
 import { Search, Sparkles, MapPin, Briefcase, Zap, Star, ArrowRight } from "lucide-react";
 import { motion, AnimatePresence } from 'motion/react';
 import Image from 'next/image';
-import { DBService } from '@/services/dbService';
-import { AIService } from '@/services/aiService';
-import { PROFESSIONS, NEIGHBORHOODS } from '@/lib/constants';
+import { AdService } from '@/services/adService';
+import { useSmartSearch } from '@/hooks/useSmartSearch';
 import { Ad } from '@/types';
 
+/**
+ * LandingPage - الصفحة الرئيسية
+ * تم إعادة بنائها بنمط Claw لتكون "Dumb UI" تعتمد على Hooks
+ */
 export default function LandingPage() {
   const [query, setQuery] = useState('');
-  const [ads, setAds] = useState<Ad[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [isSearching, setIsSearching] = useState(false);
-  const [filters, setFilters] = useState<any>({
-    profession: 'الكل',
-    neighborhood: 'الكل',
-    type: 'offer'
-  });
-  const [userApiKey, setUserApiKey] = useState(typeof window !== 'undefined' ? localStorage.getItem('gemini_api_key') : null);
+  const [userApiKey] = useState(typeof window !== 'undefined' ? localStorage.getItem('gemini_api_key') : null);
+  
+  // استخدام الهوك المخصص للبحث الذكي
+  const { ads, loading, isSearching, search, setAds } = useSmartSearch(userApiKey);
 
-  const fetchAds = useCallback(async () => {
-    setLoading(true);
-    const { data } = await DBService.fetchAds({ 
-      ...filters, 
-      status: 'active',
-      limit: 6 
-    });
+  // جلب الإعلانات الأولية
+  const fetchInitialAds = useCallback(async () => {
+    const { data } = await AdService.fetchAds({ status: 'active', limit: 6 });
     if (data) setAds(data);
-    setLoading(false);
-  }, [filters]);
+  }, [setAds]);
 
   useEffect(() => {
-    fetchAds();
-  }, [fetchAds]);
+    fetchInitialAds();
+  }, [fetchInitialAds]);
 
   const handleSmartSearch = async () => {
-    if (!query.trim() || !userApiKey) return;
-    setIsSearching(true);
-    try {
-      const ai = new AIService(userApiKey);
-      const smartFilters = await ai.smartSearch(query, PROFESSIONS, NEIGHBORHOODS);
-      setFilters(smartFilters);
+    const smartFilters = await search(query);
+    if (smartFilters) {
       alert(`تم تطبيق الفلاتر الذكية: ${smartFilters.profession} في ${smartFilters.neighborhood}`);
-    } catch (e) {
-      console.error("Smart search failed:", e);
-    } finally {
-      setIsSearching(false);
     }
   };
 

@@ -28,7 +28,8 @@ import {
   Eye,
   Phone
 } from 'lucide-react';
-import { DBService } from '@/services/dbService';
+import { AnalyticsService } from '@/services/analyticsService';
+import { ProfileService } from '@/services/profileService';
 import { AIService } from '@/services/aiService';
 import { useUser } from '@clerk/nextjs';
 import ReactMarkdown from 'react-markdown';
@@ -50,9 +51,9 @@ export default function AdminDashboard() {
   useEffect(() => {
     const fetchData = async () => {
       const [analytics, verifs, visits] = await Promise.all([
-        DBService.getAnalyticsData(),
-        DBService.fetchVerificationRequests(),
-        DBService.fetchFieldVisitRequests()
+        AnalyticsService.getAnalyticsData(),
+        ProfileService.fetchVerificationRequests(),
+        ProfileService.fetchFieldVisitRequests()
       ]);
       setData(analytics);
       setVerifications(verifs.data || []);
@@ -64,7 +65,7 @@ export default function AdminDashboard() {
 
   const handleApproveVerification = async (userId: string) => {
     try {
-      await DBService.approveVerification(userId);
+      await ProfileService.approveVerification(userId);
       setVerifications(prev => prev.filter(v => v.id !== userId));
       alert('تم توثيق الحساب بنجاح');
     } catch (e) {
@@ -74,7 +75,7 @@ export default function AdminDashboard() {
 
   const handleUpdateVisitStatus = async (requestId: string, userId: string, status: 'approved' | 'rejected') => {
     try {
-      await DBService.updateFieldVisitStatus(requestId, userId, status);
+      await ProfileService.updateFieldVisitStatus(requestId, userId, status);
       setVisitRequests(prev => prev.map(r => r.id === requestId ? { ...r, status } : r));
       alert(status === 'approved' ? 'تمت الموافقة على الزيارة' : 'تم رفض الزيارة');
     } catch (e) {

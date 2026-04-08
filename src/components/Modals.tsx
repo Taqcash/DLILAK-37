@@ -2,9 +2,15 @@ import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import { X, Star, Send, Save, Trash2, Camera } from 'lucide-react';
 import { useUser } from '@clerk/nextjs';
-import { DBService } from '../services/dbService';
+import { AdService } from '../services/adService';
+import { RatingService } from '../services/ratingService';
+import { AdminService } from '../services/adminService';
 import { Ad, Profile } from '../types';
 
+/**
+ * Modals - مجموعة النوافذ المنبثقة
+ * تم تقسيم المنطق إلى خدمات متخصصة بنمط Claw
+ */
 export const EditAdModal = ({ ad, onClose, onUpdate }: { ad: Ad, onClose: () => void, onUpdate: (ad: Ad | null) => void }) => {
   const [formData, setFormData] = useState({ ...ad });
   const [saving, setSaving] = useState(false);
@@ -13,7 +19,7 @@ export const EditAdModal = ({ ad, onClose, onUpdate }: { ad: Ad, onClose: () => 
   const handleSave = async () => {
     setSaving(true);
     try {
-      const { data, error } = await DBService.updateAd(ad.id, formData);
+      const { data, error } = await AdService.updateAd(ad.id, formData);
       if (error) throw error;
       onUpdate(data);
       onClose();
@@ -28,7 +34,7 @@ export const EditAdModal = ({ ad, onClose, onUpdate }: { ad: Ad, onClose: () => 
     if (!confirm('هل أنت متأكد من حذف هذا الإعلان نهائياً؟')) return;
     setDeleting(true);
     try {
-      const { error } = await DBService.deleteAd(ad.id);
+      const { error } = await AdService.deleteAd(ad.id);
       if (error) throw error;
       onUpdate(null); // Signal deletion
       onClose();
@@ -134,7 +140,7 @@ export const RatingModal = ({ service, onClose }: { service: Ad, onClose: () => 
     if (rating === 0 || !user) return;
     setSubmitting(true);
     try {
-      await DBService.addRating(service.id, user.id, rating, comment);
+      await RatingService.addRating(service.id, user.id, rating, comment);
       alert('شكراً لتقييمك!');
       onClose();
     } catch (error: any) {
@@ -193,7 +199,7 @@ export const ContactAdminModal = ({ onClose }: { onClose: () => void }) => {
     if (!message || !user) return;
     setSending(true);
     try {
-      const { error } = await DBService.createAdminMessage(user.id, message);
+      const { error } = await AdminService.createAdminMessage(user.id, message);
       if (error) throw error;
       alert('تم إرسال رسالتك للإدارة بنجاح. سنقوم بالرد عليك قريباً.');
       onClose();

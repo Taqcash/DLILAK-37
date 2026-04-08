@@ -27,11 +27,16 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { useUser } from '@clerk/nextjs';
 import Image from 'next/image';
-import { DBService } from '@/services/dbService';
+import { AdService } from '@/services/adService';
+import { RatingService } from '@/services/ratingService';
 import { AIService } from '@/services/aiService';
 import { ContactAdminModal } from '@/components/Modals';
 import ReactMarkdown from 'react-markdown';
 
+/**
+ * ServiceDetailPage - صفحة تفاصيل الخدمة
+ * تم تقسيم المنطق إلى AdService و RatingService بنمط Claw
+ */
 export default function ServiceDetailPage() {
   const params = useParams();
   const id = params.id as string;
@@ -50,8 +55,8 @@ export default function ServiceDetailPage() {
     setLoading(true);
     try {
       const [adRes, ratingsRes] = await Promise.all([
-        DBService.getAd(id),
-        DBService.fetchRatings(id)
+        AdService.getAd(id),
+        RatingService.fetchRatings(id)
       ]);
       
       if (adRes.data) setAd(adRes.data);
@@ -73,7 +78,7 @@ export default function ServiceDetailPage() {
     if (!user || !id) return;
     setIsSubmittingRating(true);
     try {
-      await DBService.addRating(id, user.id, rating, comment);
+      await RatingService.addRating(id, user.id, rating, comment);
       alert('تم إضافة تقييمك بنجاح!');
       setShowRatingModal(false);
       fetchData(); // Refresh

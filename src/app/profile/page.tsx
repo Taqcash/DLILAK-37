@@ -27,12 +27,18 @@ import {
 } from 'lucide-react';
 import { useUser, useClerk } from '@clerk/nextjs';
 import Image from 'next/image';
-import { DBService } from '@/services/dbService';
+import { ProfileService } from '@/services/profileService';
+import { AdService } from '@/services/adService';
+import { StorageService } from '@/services/storageService';
 import { AIService } from '@/services/aiService';
 import { EditAdModal } from '@/components/Modals';
 import { supabase } from '@/lib/supabase';
 import ReactMarkdown from 'react-markdown';
 
+/**
+ * ProfilePage - صفحة الملف الشخصي
+ * تم تقسيم المنطق إلى خدمات متخصصة بنمط Claw
+ */
 export default function ProfilePage() {
   const { user, isLoaded } = useUser();
   const { signOut } = useClerk();
@@ -54,8 +60,8 @@ export default function ProfilePage() {
     setLoading(true);
     try {
       const [profileRes, adsRes, logsRes] = await Promise.all([
-        supabase.from('profiles').select('*').eq('id', user.id).single(),
-        DBService.fetchAds({ status: 'active' }),
+        ProfileService.getProfile(user.id),
+        AdService.fetchAds({ status: 'active' }),
         supabase.from('ai_logs').select('*').eq('user_id', user.id).order('created_at', { ascending: false })
       ]);
       
@@ -79,7 +85,7 @@ export default function ProfilePage() {
 
   const handleDeleteAd = async (id: string) => {
     if (!confirm('هل أنت متأكد من حذف هذا الإعلان؟')) return;
-    const { error } = await DBService.deleteAd(id);
+    const { error } = await AdService.deleteAd(id);
     if (!error) {
       setUserAds(prev => prev.filter(ad => ad.id !== id));
     }
@@ -89,8 +95,8 @@ export default function ProfilePage() {
     if (!verificationFile || !user) return;
     setIsVerifying(true);
     try {
-      const url = await DBService.uploadImage('verifications', verificationFile, `${user.id}/${Date.now()}.jpg`);
-      await DBService.updateProfile(user.id, { 
+      const url = await StorageService.uploadImage('verifications', verificationFile, `${user.id}/${Date.now()}.jpg`);
+      await ProfileService.updateProfile(user.id, { 
         verification_image: url,
         is_verified: false // Pending
       });
@@ -108,7 +114,7 @@ export default function ProfilePage() {
     setIsGeneratingReport(true);
     try {
       const ai = new AIService(userApiKey);
-      const { data: recentAds } = await DBService.fetchAds({});
+      const { data: recentAds } = await AdService.fetchAds({});
       const report = await ai.generateAdminReport(recentAds || []);
       setAdminReport(report);
     } catch (e) {
@@ -121,7 +127,7 @@ export default function ProfilePage() {
   const handleRequestFieldVisit = async () => {
     if (!user) return;
     try {
-      const { error } = await DBService.requestFieldVisit(user.id);
+      const { error } = await ProfileService.requestFieldVisit(user.id);
       if (error) throw error;
       alert('تم إرسال طلب الزيارة الميدانية بنجاح.');
     } catch (e: any) {

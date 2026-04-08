@@ -1,6 +1,10 @@
 import { useState, useEffect } from 'react';
-import { DBService } from '../services/dbService';
+import { SiteService } from '../services/siteService';
 
+/**
+ * useSiteData - هوك مخصص لجلب بيانات الموقع العامة
+ * تم تحويله لاستخدام SiteService بنمط Claw
+ */
 export const useSiteData = () => {
   const [neighborhoods, setNeighborhoods] = useState<string[]>([]);
   const [professions, setProfessions] = useState<string[]>([]);
@@ -11,16 +15,16 @@ export const useSiteData = () => {
     const fetchData = async () => {
       try {
         const [nData, pData, iData] = await Promise.all([
-          DBService.getNeighborhoods(),
-          DBService.getProfessions(),
-          DBService.getSiteImages()
+          SiteService.getNeighborhoods(),
+          SiteService.getProfessions(),
+          SiteService.getSiteImages()
         ]);
         
-        if (nData.data) setNeighborhoods(nData.data.map(n => n.name));
-        if (pData.data) setProfessions(pData.data.map(p => p.name));
+        if (nData.data) setNeighborhoods(nData.data.map((n: any) => n.name));
+        if (pData.data) setProfessions(pData.data.map((p: any) => p.name));
         if (iData.data) {
           const images: any = {};
-          iData.data.forEach(img => images[img.key] = img.url);
+          iData.data.forEach((img: any) => images[img.key] = img.url);
           setSiteImages(images);
         }
       } catch (e) {

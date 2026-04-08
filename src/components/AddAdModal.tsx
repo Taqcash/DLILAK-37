@@ -21,11 +21,17 @@ import {
 } from 'lucide-react';
 import { useUser } from '@clerk/nextjs';
 import Image from 'next/image';
-import { DBService } from '@/services/dbService';
+import { AdService } from '@/services/adService';
+import { ProfileService } from '@/services/profileService';
+import { LogService } from '@/services/logService';
 import { AIService } from '@/services/aiService';
 import { uploadToCloudinary } from '@/services/imageService';
 import ReactMarkdown from 'react-markdown';
 
+/**
+ * AddAdModal - نافذة إضافة إعلان جديد
+ * تم تقسيم المنطق إلى AdService و ProfileService بنمط Claw
+ */
 export const AddAdModal = ({ onClose, professions, neighborhoods, userApiKey }: any) => {
   const { user } = useUser();
   const [step, setStep] = useState(1);
@@ -63,7 +69,7 @@ export const AddAdModal = ({ onClose, professions, neighborhoods, userApiKey }: 
       setAiAnalysis(analysis);
       // Log AI interaction
       if (user) {
-        await DBService.logAIInteraction(user.id, 'طبيب الإعلانات', formData.description, analysis);
+        await LogService.logAIInteraction(user.id, 'طبيب الإعلانات', formData.description, analysis);
       }
     } catch (e) {
       alert('فشل تحليل الإعلان.');
@@ -81,7 +87,7 @@ export const AddAdModal = ({ onClose, professions, neighborhoods, userApiKey }: 
         imageUrl = await uploadToCloudinary(imageFile);
       }
 
-      const { error } = await DBService.createAd({
+      const { error } = await AdService.createAd({
         ...formData,
         user_id: user.id,
         image_url: imageUrl,
@@ -92,7 +98,7 @@ export const AddAdModal = ({ onClose, professions, neighborhoods, userApiKey }: 
       if (error) throw error;
 
       // Award points for creating an ad
-      await DBService.updateProfile(user.id, { points: (user.publicMetadata?.points as number || 0) + 50 });
+      await ProfileService.incrementPoints(user.id, 50);
       
       alert('تم نشر إعلانك بنجاح! حصلت على 50 نقطة مكافأة.');
       onClose();

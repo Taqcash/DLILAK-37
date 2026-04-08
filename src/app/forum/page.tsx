@@ -22,13 +22,18 @@ import {
 } from 'lucide-react';
 import { useUser } from '@clerk/nextjs';
 import Image from 'next/image';
-import { DBService } from '@/services/dbService';
+import { ForumService } from '@/services/forumService';
+import { ProfileService } from '@/services/profileService';
 import { AIService } from '@/services/aiService';
 import { supabase } from '@/lib/supabase';
 import { useRealtime } from '@/hooks/useRealtime';
 import ReactMarkdown from 'react-markdown';
 import { PROFESSIONS, NEIGHBORHOODS } from '@/lib/constants';
 
+/**
+ * ForumPage - صفحة المنتدى
+ * تم تقسيم المنطق إلى ForumService و ProfileService بنمط Claw
+ */
 export default function ForumPage() {
   const { user, isLoaded } = useUser();
   const [posts, setPosts] = useState<any[]>([]);
@@ -40,7 +45,7 @@ export default function ForumPage() {
 
   const fetchPosts = useCallback(async () => {
     setLoading(true);
-    const { data } = await DBService.fetchForumPosts();
+    const { data } = await ForumService.fetchForumPosts();
     if (data) setPosts(data);
     setLoading(false);
   }, []);
@@ -68,18 +73,12 @@ export default function ForumPage() {
       }
 
       // 2. Create post with AI tags
-      const { data: post, error } = await supabase.from('forum_posts').insert({
-        user_id: user.id,
-        content: newPost,
-        profession: aiTags?.profession,
-        neighborhood: aiTags?.neighborhood,
-        is_urgent: aiTags?.urgency_level === 'high'
-      }).select().single();
+      const { data: post, error } = await ForumService.createForumPost(user.id, newPost);
       
       if (error) throw error;
 
       // 3. Award points (Atomic)
-      await DBService.incrementPoints(user.id, 10);
+      await ProfileService.incrementPoints(user.id, 10);
 
       setNewPost('');
       alert('تم نشر مشاركتك بنجاح! حصلت على 10 نقاط.');
