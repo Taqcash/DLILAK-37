@@ -6,7 +6,7 @@ export const getGeminiAI = (userApiKey?: string) => {
 };
 
 export const getSystemGeminiAI = () => {
-  const apiKey = (import.meta as any).env.VITE_GEMINI_API_KEY;
+  const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) return null;
   return new GoogleGenAI({ apiKey });
 };

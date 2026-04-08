@@ -61,11 +61,18 @@ export const AddAdModal = ({ onClose, professions, neighborhoods, userApiKey }: 
   };
 
   const runAdDoctor = async () => {
-    if (!formData.description || !userApiKey) return;
+    if (!formData.description) return;
     setIsAnalyzing(true);
     try {
-      const ai = new AIService(userApiKey);
-      const analysis = await ai.analyzeAd(formData.description, professions);
+      const response = await fetch('/api/ai/analyze-ad', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ description: formData.description })
+      });
+      
+      const result = await response.json();
+      if (result.error) throw new Error(result.error);
+      const analysis = result.analysis;
       setAiAnalysis(analysis);
       // Log AI interaction
       if (user) {
@@ -89,6 +96,8 @@ export const AddAdModal = ({ onClose, professions, neighborhoods, userApiKey }: 
 
       const { error } = await AdService.createAd({
         ...formData,
+        price: Number(formData.price) || 0,
+        type: formData.type as 'offer' | 'request',
         user_id: user.id,
         image_url: imageUrl,
         status: 'active',

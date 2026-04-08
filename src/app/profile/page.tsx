@@ -110,13 +110,18 @@ export default function ProfilePage() {
   };
 
   const generateAdminReport = async () => {
-    if (!userApiKey) return;
     setIsGeneratingReport(true);
     try {
-      const ai = new AIService(userApiKey);
       const { data: recentAds } = await AdService.fetchAds({});
-      const report = await ai.generateAdminReport(recentAds || []);
-      setAdminReport(report);
+      const response = await fetch('/api/ai/generate-report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ activities: recentAds || [] })
+      });
+      
+      const result = await response.json();
+      if (result.error) throw new Error(result.error);
+      setAdminReport(result.report);
     } catch (e) {
       alert('فشل توليد التقرير.');
     } finally {
@@ -154,7 +159,7 @@ export default function ProfilePage() {
   const handleSaveSettings = async () => {
     if (!user) return;
     try {
-      const { error } = await DBService.updateProfile(user.id, settings);
+      const { error } = await ProfileService.updateProfile(user.id, settings);
       if (error) throw error;
       alert('تم حفظ الإعدادات بنجاح.');
       fetchUserData();

@@ -106,25 +106,18 @@ export default function AdminDashboard() {
   };
 
   const generateSmartReport = async () => {
-    if (!data || !userApiKey) return;
+    if (!data) return;
     setIsGeneratingReport(true);
     try {
-      const ai = new AIService(userApiKey);
-      const prompt = `بصفتك محلل بيانات ذكي لمنصة "دليل خدمتك" في بورتسودان، قم بتحليل البيانات التالية وقدم تقريراً استراتيجياً مختصراً (Smart Report) يتضمن:
-      1. تحليل لنمو المستخدمين والنشاط.
-      2. توزيع الخدمات وأكثرها طلباً.
-      3. توصيات لتحسين التفاعل وزيادة الإيرادات.
+      const response = await fetch('/api/ai/generate-report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ activities: data.stats })
+      });
       
-      البيانات:
-      - عدد المستخدمين: ${data.stats.users}
-      - عدد الإعلانات: ${data.stats.ads}
-      - عدد مشاركات المنتدى: ${data.stats.posts}
-      - الإيرادات التقديرية: ${data.stats.revenue} ريال
-      
-      اجعل التقرير احترافياً وملهماً بلهجة سودانية مهذبة وراقية.`;
-      
-      const report = await ai.analyzeGeneral(prompt);
-      setSmartReport(report);
+      const result = await response.json();
+      if (result.error) throw new Error(result.error);
+      setSmartReport(result.report);
     } catch (e) {
       setSmartReport('فشل إنشاء التقرير الذكي. تأكد من إعداد مفتاح Gemini.');
     } finally {

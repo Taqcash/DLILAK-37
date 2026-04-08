@@ -65,11 +65,20 @@ export default function ForumPage() {
     if (!newPost.trim() || !user) return;
     setIsPosting(true);
     try {
-      // 1. Analyze post with AI for smart tagging (optional but cool)
+      // 1. Analyze post with AI for smart tagging
       let aiTags = null;
-      if (userApiKey) {
-        const ai = new AIService(userApiKey);
-        aiTags = await ai.analyzeForumPost(newPost, PROFESSIONS, NEIGHBORHOODS);
+      try {
+        const aiResponse = await fetch('/api/ai/analyze-forum', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content: newPost })
+        });
+        if (aiResponse.ok) {
+          const result = await aiResponse.json();
+          aiTags = result.analysis;
+        }
+      } catch (e) {
+        console.warn("AI Tagging failed, proceeding without tags.");
       }
 
       // 2. Create post with AI tags

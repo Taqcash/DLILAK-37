@@ -6,6 +6,7 @@ import { AdService } from '../services/adService';
 import { RatingService } from '../services/ratingService';
 import { AdminService } from '../services/adminService';
 import { Ad, Profile } from '../types';
+import { PROFESSIONS, NEIGHBORHOODS } from '../lib/constants';
 
 /**
  * Modals - مجموعة النوافذ المنبثقة

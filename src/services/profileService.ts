@@ -59,6 +59,22 @@ export class ProfileService {
       .returns<FieldVisitRequest[]>();
   }
 
+  static async fetchVerificationRequests() {
+    return await supabase
+      .from('profiles')
+      .select('*')
+      .not('verification_image', 'is', null)
+      .eq('is_verified', false)
+      .order('created_at', { ascending: false });
+  }
+
+  static async approveVerification(userId: string) {
+    return await supabase
+      .from('profiles')
+      .update({ is_verified: true })
+      .eq('id', userId);
+  }
+
   static async updateFieldVisitStatus(requestId: string, userId: string, status: 'approved' | 'rejected') {
     const { error: requestError } = await supabase
       .from('field_visit_requests')

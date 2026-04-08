@@ -21,6 +21,7 @@ export default function ChatPage() {
   const router = useRouter();
   const [otherProfile, setOtherProfile] = useState<Profile | null>(null);
   const [newMessage, setNewMessage] = useState('');
+  const scrollRef = useRef<HTMLDivElement>(null);
   
   // استخدام الهوك المخصص للدردشة
   const { messages, loading, sendMessage } = useChat(user?.id, otherId);
@@ -45,6 +46,12 @@ export default function ChatPage() {
     await sendMessage(newMessage);
     setNewMessage('');
   };
+
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [messages]);
 
   if (!isLoaded || loading) {
     return (

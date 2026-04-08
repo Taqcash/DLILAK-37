@@ -1,6 +1,6 @@
 export const uploadToCloudinary = async (file: File | string) => {
-  const cloudName = (import.meta as any).env.VITE_CLOUDINARY_CLOUD_NAME;
-  const uploadPreset = (import.meta as any).env.VITE_CLOUDINARY_UPLOAD_PRESET;
+  const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
+  const uploadPreset = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
 
   if (!cloudName || !uploadPreset) {
     console.error("Cloudinary config missing");

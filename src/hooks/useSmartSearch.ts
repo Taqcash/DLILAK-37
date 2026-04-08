@@ -22,10 +22,15 @@ export function useSmartSearch(apiKey: string | null) {
     try {
       let filters = { profession: 'الكل', neighborhood: 'الكل', type: 'offer' };
 
-      // إذا توفر مفتاح AI، نستخدم البحث الذكي
-      if (apiKey) {
-        const ai = new AIService(apiKey);
-        filters = await ai.smartSearch(query, PROFESSIONS, NEIGHBORHOODS);
+      // Call the API route for smart search
+      const response = await fetch('/api/ai/smart-search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query })
+      });
+      
+      if (response.ok) {
+        filters = await response.json();
       }
 
       // جلب الإعلانات بناءً على الفلاتر
