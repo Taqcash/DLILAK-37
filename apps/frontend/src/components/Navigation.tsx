@@ -17,33 +17,16 @@ import {
   Briefcase,
   LayoutDashboard
 } from 'lucide-react';
-import { useSupabase } from '@/app/providers';
+import { Profile, Notification } from 'shared-types';
 import Image from 'next/image';
 import { Logo } from './Logo';
 import ThemeToggle from './ThemeToggle';
 
-import { Profile, Notification } from 'shared-types';
-
 export const NavigationHeader = ({ userProfile, notifications, onShowNotifications }: { userProfile: Profile | null, notifications: Notification[], onShowNotifications: () => void }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const pathname = usePathname();
-  const { supabase } = useSupabase();
   const router = useRouter();
-  const [user, setUser] = useState<any>(null);
-
-  React.useEffect(() => {
-    const getUser = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      setUser(user);
-    };
-    getUser();
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
-    });
-
-    return () => subscription.unsubscribe();
-  }, [supabase]);
+  const user = userProfile;
 
   const navLinks = [
     { href: '/', icon: <Home size={20} />, label: 'الرئيسية' },
@@ -51,12 +34,8 @@ export const NavigationHeader = ({ userProfile, notifications, onShowNotificatio
     { href: '/about', icon: <Info size={20} />, label: 'عن بورتسودان' }
   ];
 
-  if (userProfile?.role === 'admin') {
-    navLinks.push({ href: '/admin', icon: <LayoutDashboard size={20} />, label: 'لوحة التحكم' });
-  }
-
   const handleLogout = async () => {
-    await supabase.auth.signOut();
+    localStorage.removeItem('auth_token');
     router.push('/login');
     router.refresh();
   };

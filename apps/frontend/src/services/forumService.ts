@@ -1,23 +1,16 @@
-import { supabase } from '../lib/supabase';
+import { api } from './api';
 import { ForumPost } from 'shared-types';
 
-/**
- * ForumService - موديل المنتدى
- * مسؤول عن جلب وإضافة المنشورات
- */
-export class ForumService {
-  static async fetchForumPosts() {
-    return await supabase
-      .from('forum_posts')
-      .select('*, profiles(full_name, avatar_url)')
-      .order('created_at', { ascending: false })
-      .returns<ForumPost[]>();
+export class WorkerForumService {
+  async fetchPosts(): Promise<ForumPost[]> {
+    const response = await api.get('/forum/posts');
+    return response.data;
   }
 
-  static async createForumPost(userId: string, content: string) {
-    return await supabase.from('forum_posts').insert({
-      user_id: userId,
-      content
-    }).select().single<ForumPost>();
+  async createPost(data: Partial<ForumPost>): Promise<ForumPost> {
+    const response = await api.post('/forum/posts', data);
+    return response.data;
   }
 }
+
+export const ForumService = new WorkerForumService();

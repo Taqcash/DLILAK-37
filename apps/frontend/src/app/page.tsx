@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { useSupabase } from '@/app/providers';
 import Link from "next/link";
 import { Search, Sparkles, MapPin, Briefcase, Zap, Star, ArrowRight, User, LogOut } from "lucide-react";
 import { motion, AnimatePresence } from 'motion/react';
@@ -20,15 +19,18 @@ import { Profile } from 'shared-types';
 
 export default function LandingPage() {
   const [query, setQuery] = useState('');
-  const { supabase } = useSupabase();
   const [user, setUser] = useState<any>(null);
   const [userProfile, setUserProfile] = useState<Profile | null>(null);
   
   const { ads, loading, isSearching, search, setAds } = useSmartSearch();
 
   const fetchInitialAds = useCallback(async () => {
-    const { data } = await AdService.fetchAds({ status: 'active', limit: 6 });
-    if (data) setAds(data);
+    try {
+      const data = await AdService.fetchAds({ status: 'active', limit: 6 });
+      setAds(data);
+    } catch (error) {
+      console.error('Error fetching ads:', error);
+    }
   }, [setAds]);
 
   useEffect(() => {

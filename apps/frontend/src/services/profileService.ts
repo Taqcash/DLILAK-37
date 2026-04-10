@@ -1,90 +1,20 @@
-import { supabase } from '../lib/supabase';
-import { Profile, FieldVisitRequest } from 'shared-types';
+import { api } from './api';
+import { Profile } from 'shared-types';
 
-/**
- * ProfileService - موديل إدارة المستخدمين والتوثيق
- * مسؤول عن الملف الشخصي، النقاط، والتوثيق الميداني
- */
-export class ProfileService {
-  static async getProfile(userId: string) {
-    return await supabase.from('profiles').select('*').eq('id', userId).single<Profile>();
+export class WorkerProfileService {
+  async getProfile(userId: string): Promise<Profile> {
+    const response = await api.get(`/profiles/${userId}`);
+    return response.data;
   }
 
-  static async updateProfile(userId: string, data: Partial<Profile>) {
-    return await supabase.from('profiles').update(data).eq('id', userId);
+  async updateProfile(userId: string, data: Partial<Profile>): Promise<Profile> {
+    const response = await api.put(`/profiles/${userId}`, data);
+    return response.data;
   }
 
-  static async syncProfile(user: any) {
-    if (!user) return null;
-    
-    const { data: profile, error } = await this.getProfile(user.id);
-
-    if (error && error.code === 'PGRST116') {
-      const { data: newProfile } = await supabase
-        .from('profiles')
-        .insert({
-          id: user.id,
-          full_name: user.user_metadata?.full_name || user.email?.split('@')[0] || 'مستخدم جديد',
-          avatar_url: user.user_metadata?.avatar_url,
-          email: user.email,
-          role: 'user',
-          points: 100
-        })
-        .select()
-        .single<Profile>();
-      return newProfile;
-    }
-    return profile;
-  }
-
-  static async incrementPoints(userId: string, amount: number) {
-    const { data: profile } = await this.getProfile(userId);
-    const currentPoints = profile?.points || 0;
-    return await supabase.from('profiles').update({ points: currentPoints + amount }).eq('id', userId);
-  }
-
-  // --- التوثيق الميداني ---
-  static async requestFieldVisit(userId: string) {
-    return await supabase.from('field_visit_requests').insert({
-      user_id: userId,
-      status: 'pending'
-    });
-  }
-
-  static async fetchFieldVisitRequests() {
-    return await supabase
-      .from('field_visit_requests')
-      .select('*, profiles(full_name, avatar_url, neighborhood, phone)')
-      .order('created_at', { ascending: false })
-      .returns<FieldVisitRequest[]>();
-  }
-
-  static async fetchVerificationRequests() {
-    return await supabase
-      .from('profiles')
-      .select('*')
-      .not('verification_image', 'is', null)
-      .eq('is_verified', false)
-      .order('created_at', { ascending: false });
-  }
-
-  static async approveVerification(userId: string) {
-    return await supabase
-      .from('profiles')
-      .update({ is_verified: true })
-      .eq('id', userId);
-  }
-
-  static async updateFieldVisitStatus(requestId: string, userId: string, status: 'approved' | 'rejected') {
-    const { error: requestError } = await supabase
-      .from('field_visit_requests')
-      .update({ status })
-      .eq('id', requestId);
-    
-    if (requestError) throw requestError;
-
-    if (status === 'approved') {
-      await supabase.from('profiles').update({ is_field_verified: true }).eq('id', userId);
-    }
+  async verifyFieldVisit(userId: string): Promise<void> {
+    await api.post(`/profiles/${userId}/verify-field`);
   }
 }
+
+export const ProfileService = new WorkerProfileService();

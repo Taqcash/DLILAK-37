@@ -1,0 +1,19 @@
+name = "port-sudan-backend"
+main = "src/index.ts"
+compatibility_date = "2025-03-11"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "port-sudan-db"
+database_id = ""  # سأملؤه لاحقاً
+
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "port-sudan-images"
+
+[ai]
+binding = "AI"
+
+[vars]
+ENVIRONMENT = "production"
+JWT_SECRET = ""  # سأملؤه لاحقاً
