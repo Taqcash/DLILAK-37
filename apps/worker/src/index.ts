@@ -271,4 +271,108 @@ app.delete('/api/ads/:id', authMiddleware, async (c) => {
   return c.json({ success: true });
 });
 
+// --- Routes: Wallet ---
+
+const walletApp = new Hono<{ Bindings: Bindings; Variables: Variables }>();
+
+walletApp.use('*', authMiddleware);
+
+walletApp.get('/balance', async (c) => {
+  const user = c.get('user');
+  let wallet: any = await c.env.DB.prepare('SELECT balance FROM user_wallets WHERE user_id = ?').bind(user.id).first();
+  
+  if (!wallet) {
+    // إنشاء محفظة لو ما موجودة
+    await c.env.DB.prepare('INSERT INTO user_wallets (user_id, balance) VALUES (?, 0)').bind(user.id).run();
+    wallet = { balance: 0 };
+  }
+  
+  return c.json(wallet);
+});
+
+walletApp.post('/deposit', zValidator('json', z.object({
+  amount: z.number().positive(),
+  payment_method: z.string(),
+  slip_image_url: z.string().url()
+})), async (c) => {
+  const user = c.get('user');
+  const { amount, payment_method, slip_image_url } = c.req.valid('json');
+  const id = crypto.randomUUID();
+  
+  await c.env.DB.prepare(
+    'INSERT INTO deposit_requests (id, user_id, amount, payment_method, slip_image_url) VALUES (?, ?, ?, ?, ?)'
+  ).bind(id, user.id, amount, payment_method, slip_image_url).run();
+  
+  return c.json({ success: true, id });
+});
+
+walletApp.post('/transfer', zValidator('json', z.object({
+  to_user_id: z.string(),
+  amount: z.number().positive(),
+  description: z.string().optional()
+})), async (c) => {
+  const user = c.get('user');
+  const { to_user_id, amount, description } = c.req.valid('json');
+  
+  // التحقق من الرصيد
+  const senderWallet: any = await c.env.DB.prepare('SELECT balance FROM user_wallets WHERE user_id = ?').bind(user.id).first();
+  if (!senderWallet || senderWallet.balance < amount) {
+    return c.json({ error: 'رصيدك غير كافٍ لإتمام هذه العملية' }, 400);
+  }
+  
+  const receiverWallet: any = await c.env.DB.prepare('SELECT balance FROM user_wallets WHERE user_id = ?').bind(to_user_id).first();
+  if (!receiverWallet) {
+    return c.json({ error: 'المستلم غير موجود أو ليس لديه محفظة نشطة' }, 404);
+  }
+
+  const txId1 = crypto.randomUUID();
+  const txId2 = crypto.randomUUID();
+  
+  // تنفيذ العملية بشكل ذري (Atomic)
+  try {
+    await c.env.DB.batch([
+      // خصم من المرسل
+      c.env.DB.prepare('UPDATE user_wallets SET balance = balance - ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?').bind(amount, user.id),
+      // إضافة للمستلم
+      c.env.DB.prepare('UPDATE user_wallets SET balance = balance + ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?').bind(amount, to_user_id),
+      // تسجيل العمليات
+      c.env.DB.prepare('INSERT INTO transactions (id, user_id, type, amount, balance_before, balance_after, description) VALUES (?, ?, "transfer_out", ?, ?, ?, ?)')
+        .bind(txId1, user.id, amount, senderWallet.balance, senderWallet.balance - amount, description || 'تحويل صادق'),
+      c.env.DB.prepare('INSERT INTO transactions (id, user_id, type, amount, balance_before, balance_after, description) VALUES (?, ?, "transfer_in", ?, ?, ?, ?)')
+        .bind(txId2, to_user_id, amount, receiverWallet.balance, receiverWallet.balance + amount, description || 'تحويل وارد')
+    ]);
+    
+    return c.json({ success: true });
+  } catch (err: any) {
+    return c.json({ error: 'فشل في إتمام عملية التحويل', details: err.message }, 500);
+  }
+});
+
+walletApp.get('/transactions', async (c) => {
+  const user = c.get('user');
+  const txs = await c.env.DB.prepare('SELECT * FROM transactions WHERE user_id = ? ORDER BY created_at DESC LIMIT 50').bind(user.id).all();
+  return c.json(txs.results);
+});
+
+walletApp.post('/ai/verify-slip', zValidator('json', z.object({
+  image_url: z.string().url()
+})), async (c) => {
+  const { image_url } = c.req.valid('json');
+  
+  try {
+    // جلب الصورة وتحويلها لـ base64 أو استخدام الرابط مباشرة لو النموذج يدعم
+    // هنا سنستخدم نموذج Vision لتحليل البيانات
+    const response = await c.env.AI.run('@cf/meta/llama-3.2-11b-vision-instruct', {
+      prompt: "حلل صورة إيصال الدفع هذه واستخرج: المبلغ، رقم المرجع، التاريخ، واسم البنك. أرجع النتيجة بصيغة JSON فقط.",
+      image: image_url // ملاحظة: قد تحتاج لتحميل الصورة أولاً وتمريرها كـ Buffer حسب إصدار الـ SDK
+    });
+    
+    return c.json({ analysis: response });
+  } catch (err: any) {
+    return c.json({ error: 'فشل في تحليل الإيصال ذكياً', details: err.message }, 500);
+  }
+});
+
+app.route('/api/wallet', walletApp);
+
 export default app;

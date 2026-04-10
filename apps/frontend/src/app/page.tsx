@@ -37,21 +37,14 @@ export default function LandingPage() {
     fetchInitialAds();
     
     const getUser = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      setUser(user);
-      if (user) {
-        const { data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).single();
-        setUserProfile(profile);
+      // TODO: Implement JWT-based user fetch from Worker API
+      const token = localStorage.getItem('auth_token');
+      if (token) {
+        // Fetch user profile from API
       }
     };
     getUser();
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
-    });
-
-    return () => subscription.unsubscribe();
-  }, [fetchInitialAds, supabase]);
+  }, [fetchInitialAds]);
 
   const handleSmartSearch = async () => {
     const smartFilters = await search(query);

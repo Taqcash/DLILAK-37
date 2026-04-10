@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { useSupabase } from '@/app/providers';
 import { motion, AnimatePresence } from 'motion/react';
 import { Send, ArrowRight, User, ShieldCheck, MoreVertical, Phone } from 'lucide-react';
 import Image from 'next/image';
@@ -17,7 +16,6 @@ import { Profile } from 'shared-types';
 export default function ChatPage() {
   const params = useParams();
   const otherId = params.id as string;
-  const { supabase } = useSupabase();
   const router = useRouter();
   const [user, setUser] = useState<any>(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
@@ -30,26 +28,17 @@ export default function ChatPage() {
 
   useEffect(() => {
     const initAuth = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
+      // TODO: Implement JWT-based auth check
+      const token = localStorage.getItem('auth_token');
+      if (!token) {
         router.push('/login');
       } else {
-        setUser(user);
+        // Fetch user from API
+        setIsAuthReady(true);
       }
-      setIsAuthReady(true);
     };
     initAuth();
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (!session) {
-        router.push('/login');
-      } else {
-        setUser(session.user);
-      }
-    });
-
-    return () => subscription.unsubscribe();
-  }, [supabase, router]);
+  }, [router]);
 
   useEffect(() => {
     const loadProfile = async () => {
