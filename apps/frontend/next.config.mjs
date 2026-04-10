@@ -1,21 +1,17 @@
-import createNextIntlPlugin from 'next-intl/plugin';
-
-const withNextIntl = createNextIntlPlugin();
-
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  experimental: {
+    optimizeCss: true,
+  },
   images: {
     remotePatterns: [
       {
         protocol: 'https',
-        hostname: 'res.cloudinary.com',
-      },
-      {
-        protocol: 'https',
         hostname: 'picsum.photos',
       },
+      // أضف نطاقات الصور الأخرى هنا
     ],
   },
 };
 
-export default withNextIntl(nextConfig);
+module.exports = nextConfig;
