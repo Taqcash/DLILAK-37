@@ -9,7 +9,6 @@ const nextConfig = {
         protocol: 'https',
         hostname: 'picsum.photos',
       },
-      // أضف نطاقات الصور الأخرى التي تستخدمها هنا
     ],
   },
 };
